@@ -291,7 +291,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                   )}
                   <div className="flex flex-row items-center">
                     <img
-                      src={feed.user.avatar || "/avatar.png"}
+                      src={feed.user.avatar || "https://img.xyfzb.qzz.io/avatar.png"}
                       className="w-8 h-8 rounded-full"
                     />
                     <div className="ml-2">
@@ -594,7 +594,7 @@ function CommentItem({
   const { t } = useTranslation();
   const profile = useContext(ProfileContext);
   const commenterName = comment.user?.username || comment.guestName || t("anonymous");
-  const commenterAvatar = comment.user?.avatar || "/avatar.png";
+  const commenterAvatar = comment.user?.avatar || "https://img.xyfzb.qzz.io/avatar.png";
   function deleteComment() {
     showConfirm(
       t("delete.comment.title"),
