@@ -131,6 +131,8 @@ export function FeedService(): Hono<{
         const body = await profileAsync(c, 'feed_create_parse', () => c.req.json());
         const { title, alias, listed, content, summary, draft, tags, createdAt } = body;
 
+    
+
         if (!title) {
             return c.text('Title is required', 400);
         }
@@ -210,7 +212,7 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.draft && feed.uid !== uid) {
+        if (feed.draft && feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
 
@@ -380,7 +382,7 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.uid !== uid) {
+        if (feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
 
@@ -461,7 +463,7 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.uid !== uid) {
+        if (feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
 
@@ -656,4 +658,3 @@ type FeedItem = {
     updatedAt: Date;
     tags?: string[];
 }
-
