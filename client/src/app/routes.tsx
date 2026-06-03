@@ -48,7 +48,7 @@ export function AppRoutes() {
         <MomentsPage />
       </AppRoute>
 
-      <AppRoute path="/admin/writing">
+      <AppRoute path="/friends">
         <FriendsPage />
       </AppRoute>
 
