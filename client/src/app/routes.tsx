@@ -80,11 +80,11 @@ export function AppRoutes() {
         <CompatTasksPage />
       </AdminRoute>
 
-      <AdminRoute path="/admin/writing" requirePermission title={t("writing")} description={t("admin.writing_description")}>
+      <AdminRoute path="/admin/writing" title={t("writing")} description={t("admin.writing_description")}>
         <WritingPage />
       </AdminRoute>
 
-      <AdminRoute path="/admin/writing/:id" requirePermission title={t("writing")} description={t("admin.writing_description")}>
+      <AdminRoute path="/admin/writing/:id" title={t("writing")} description={t("admin.writing_description")}>
         {({ id }) => <WritingPage id={tryInt(0, id)} />}
       </AdminRoute>
 
