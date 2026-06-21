@@ -1,3 +1,4 @@
+import { UserCreatePage } from "../page/user-create";
 import type { ReactNode } from "react";
 import { useContext } from "react";
 import type { DefaultParams, PathPattern } from "wouter";
@@ -66,6 +67,11 @@ export function AppRoutes() {
 
       <AdminRoute path="/admin/settings" requirePermission title={t("settings.title")} description={t("admin.settings_description")}>
         <Settings />
+      </AdminRoute>
+
+{/* 新增：用户管理 */}
+      <AdminRoute path="/admin/users" requirePermission title="创建用户" description="创建新的用户账号">
+        <UserCreatePage />
       </AdminRoute>
 
       <AdminRoute path="/admin/health" requirePermission title={t("health.title")} description={t("admin.health_description")}>
