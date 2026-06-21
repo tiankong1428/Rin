@@ -388,6 +388,14 @@ class UserAPI {
     return this.http.put<{ success: boolean }>("/api/user/password", body);
   }
 
+  // 创建新用户（仅管理员）
+  async createUser(body: { 
+    username: string; 
+    password: string 
+  }): Promise<ApiResponse<{ success: boolean; userId: number }>> {
+    return this.http.post<{ success: boolean; userId: number }>("/api/user/create", body);
+  }
+
   // POST /api/user/logout
   async logout(): Promise<ApiResponse<void>> {
     return this.http.post<void>("/api/user/logout");
