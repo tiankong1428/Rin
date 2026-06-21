@@ -1,131 +1,119 @@
 import { useState } from 'react';
-import { useApi } from '../hooks/use-api';
+import { t } from 'i18next';
+import { client } from '../app/runtime';
+import { ButtonWithLoading } from './button';
+import { Input } from './input';
 
 export function PasswordChangeForm() {
-  const api = useApi();
-  
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess(false);
+    const handleSubmit = async () => {
+        setError('');
+        setSuccess('');
 
-    // 前端校验
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      setError('请填写所有密码字段');
-      return;
-    }
+        // 前端校验
+        if (!oldPassword || !newPassword || !confirmPassword) {
+            setError('请填写所有密码字段');
+            return;
+        }
 
-    if (newPassword !== confirmPassword) {
-      setError('两次输入的新密码不一致');
-      return;
-    }
+        if (newPassword !== confirmPassword) {
+            setError('两次输入的新密码不一致');
+            return;
+        }
 
-    if (newPassword.length < 6) {
-      setError('新密码至少需要 6 个字符');
-      return;
-    }
+        if (newPassword.length < 6) {
+            setError('新密码至少需要 6 个字符');
+            return;
+        }
 
-    setLoading(true);
-    try {
-      const result = await api.user.changePassword({
-        oldPassword,
-        newPassword,
-      });
+        setIsLoading(true);
+        try {
+            const { error: apiError } = await client.user.changePassword({
+                oldPassword,
+                newPassword,
+            });
 
-      if (result.error) {
-        throw new Error(result.error.value);
-      }
+            if (apiError) {
+                setError(apiError.value || '修改失败');
+                return;
+            }
 
-      setSuccess(true);
-      // 清空表单
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '修改失败，请重试');
-    } finally {
-      setLoading(false);
-    }
-  };
+            setSuccess('密码修改成功！');
+            // 清空表单
+            setOldPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (err) {
+            setError('网络错误，请重试');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-lg font-semibold">修改密码</h3>
-      
-      {/* 错误提示 */}
-      {error && (
-        <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm">
-          {error}
+    return (
+        <div className="space-y-6">
+            <h2 className="text-xl font-bold t-primary">修改密码</h2>
+            
+            {/* 错误提示 */}
+            {error && (
+                <p className="text-sm text-red-500">{error}</p>
+            )}
+            
+            {/* 成功提示 */}
+            {success && (
+                <p className="text-sm text-green-500">{success}</p>
+            )}
+
+            {/* 旧密码 */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium t-secondary">当前密码</label>
+                <Input
+                    type="password"
+                    value={oldPassword}
+                    setValue={setOldPassword}
+                    placeholder="请输入当前密码"
+                    disabled={isLoading}
+                />
+            </div>
+
+            {/* 新密码 */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium t-secondary">新密码</label>
+                <Input
+                    type="password"
+                    value={newPassword}
+                    setValue={setNewPassword}
+                    placeholder="请输入新密码（至少 6 位）"
+                    disabled={isLoading}
+                />
+            </div>
+
+            {/* 确认新密码 */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium t-secondary">确认新密码</label>
+                <Input
+                    type="password"
+                    value={confirmPassword}
+                    setValue={setConfirmPassword}
+                    placeholder="请再次输入新密码"
+                    disabled={isLoading}
+                />
+            </div>
+
+            {/* 提交按钮 */}
+            <div className="pt-2">
+                <ButtonWithLoading
+                    title={isLoading ? '保存中...' : '修改密码'}
+                    onClick={handleSubmit}
+                    loading={isLoading}
+                />
+            </div>
         </div>
-      )}
-      
-      {/* 成功提示 */}
-      {success && (
-        <div className="p-3 bg-green-50 text-green-600 rounded-md text-sm">
-          密码修改成功！
-        </div>
-      )}
-
-      {/* 旧密码 */}
-      <div>
-        <label className="block text-sm font-medium mb-1">
-          当前密码
-        </label>
-        <input
-          type="password"
-          value={oldPassword}
-          onChange={(e) => setOldPassword(e.target.value)}
-          className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="请输入当前密码"
-          autoComplete="current-password"
-        />
-      </div>
-
-      {/* 新密码 */}
-      <div>
-        <label className="block text-sm font-medium mb-1">
-          新密码
-        </label>
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="请输入新密码（至少 6 位）"
-          autoComplete="new-password"
-        />
-      </div>
-
-      {/* 确认新密码 */}
-      <div>
-        <label className="block text-sm font-medium mb-1">
-          确认新密码
-        </label>
-        <input
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="请再次输入新密码"
-          autoComplete="new-password"
-        />
-      </div>
-
-      {/* 提交按钮 */}
-      <button
-        type="submit"
-        disabled={loading}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {loading ? '保存中...' : '修改密码'}
-      </button>
-    </form>
-  );
+    );
 }
