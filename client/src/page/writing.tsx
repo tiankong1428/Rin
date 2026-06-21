@@ -376,6 +376,7 @@ export function WritingPage({ id }: { id?: number }) {
                 setValue={setLoginRequired}
                 placeholder="仅登录可见"
               />
+</FlatMetaRow>
                         {isAdmin && (
               <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
                 <p className="mr-2 whitespace-nowrap">
