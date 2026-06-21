@@ -196,10 +196,21 @@ export function WritingPage({ id }: { id?: number }) {
 
       useEffect(() => {
     if (id) {
-      client.feed
+            client.feed
         .get(id)
-        .then(({ data }) => {
+        .then(({ data, error }) => {
+          if (error) {
+            showAlert(error.value as string);
+            return;
+          }
           if (data) {
+            // 权限检查：不是自己的文章且不是管理员，禁止编辑
+            if (data.uid !== profile?.id && !isAdmin) {
+              showAlert("无权限编辑此文章", () => {
+                window.location.href = "/";
+              });
+              return;
+            }
             // 获取本地草稿的最后修改时间
             const localModifiedAt = cache.getModifiedAt();
             // 获取服务器的最后更新时间
