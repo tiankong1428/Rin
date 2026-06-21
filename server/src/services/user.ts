@@ -11,6 +11,7 @@ import {
     InternalServerError,
     NotFoundError
 } from "../errors";
+import { hashPassword, verifyPassword } from "../utils/password";
 
 export function UserService(): Hono {
     const app = new Hono();
@@ -209,6 +210,62 @@ export function UserService(): Hono {
 
         return c.json({ success: true });
     });
-
+    // PUT /user/password - 修改密码
+    app.put('/password', async (c: AppContext) => {
+        const uid = c.get('uid');
+        const db = c.get('db');
+        
+        if (!uid) {
+            throw new ForbiddenError('Authentication required');
+        }
+        
+        const body = await profileAsync(c, 'user_password_parse', () => c.req.json());
+        const { oldPassword, newPassword } = body as { oldPassword: string; newPassword: string };
+        
+        // 校验参数
+        if (!oldPassword || !newPassword) {
+            throw new BadRequestError('请输入旧密码和新密码');
+        }
+        
+        if (newPassword.length < 6) {
+            throw new BadRequestError('新密码至少需要 6 个字符');
+        }
+        
+        if (newPassword.length > 128) {
+            throw new BadRequestError('新密码太长了');
+        }
+        
+        // 获取当前用户
+        const user = await profileAsync(c, 'user_password_lookup', () => 
+            db.query.users.findFirst({ where: eq(users.id, uid) })
+        );
+        
+        if (!user) {
+            throw new NotFoundError('用户不存在');
+        }
+        
+        // 验证旧密码
+        if (user.password) {
+            const oldPasswordCorrect = await profileAsync(c, 'user_password_verify', () => 
+                verifyPassword(oldPassword, user.password!)
+            );
+            
+            if (!oldPasswordCorrect) {
+                throw new ForbiddenError('旧密码不正确');
+            }
+        }
+        
+        // 哈希新密码
+        const newPasswordHash = await profileAsync(c, 'user_password_hash', () => 
+            hashPassword(newPassword)
+        );
+        
+        // 更新密码
+        await profileAsync(c, 'user_password_update', () => 
+            db.update(users).set({ password: newPasswordHash }).where(eq(users.id, uid))
+        );
+        
+        return c.json({ success: true });
+    });
     return app;
 }
