@@ -270,5 +270,61 @@ export function UserService(): Hono {
         
         return c.json({ success: true });
     });
+    // POST /user/create - 创建新用户（仅管理员）
+    app.post('/create', async (c: AppContext) => {
+        const db = c.get('db');
+        const admin = c.get('admin');
+        
+        // 只有管理员可以创建用户
+        if (!admin) {
+            throw new ForbiddenError('只有管理员可以创建用户');
+        }
+        
+        const body = await profileAsync(c, 'user_create_parse', () => c.req.json());
+        const { username, password } = body as { username: string; password: string };
+        
+        // 校验参数
+        if (!username || username.trim() === '') {
+            throw new BadRequestError('请输入用户名');
+        }
+        
+        if (!password || password.length < 6) {
+            throw new BadRequestError('密码至少需要 6 个字符');
+        }
+        
+        // 检查用户名是否已存在
+        const existUser = await profileAsync(c, 'user_create_check', () => 
+            db.query.users.findFirst({ where: eq(users.username, username.trim()) })
+        );
+        
+        if (existUser) {
+            throw new BadRequestError('用户名已存在');
+        }
+        
+        // 哈希密码
+        const passwordHash = await profileAsync(c, 'user_create_hash', () => 
+            hashPassword(password)
+        );
+        
+        // 创建用户
+        const result = await profileAsync(c, 'user_create_insert', () => 
+            db.insert(users).values({
+                username: username.trim(),
+                password: passwordHash,
+                openid: `local_${Date.now()}`,
+                avatar: '',
+                permission: 0,  // 默认普通用户
+            }).returning({ insertedId: users.id })
+        );
+        
+        if (!result || result.length === 0) {
+            throw new InternalServerError('创建用户失败');
+        }
+        
+        return c.json({ 
+            success: true, 
+            userId: result[0].insertedId 
+        });
+    });
     return app;
 }
