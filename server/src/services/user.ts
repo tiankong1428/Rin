@@ -262,7 +262,10 @@ export function UserService(): Hono {
         
         // 更新密码
         await profileAsync(c, 'user_password_update', () => 
-            db.update(users).set({ password: newPasswordHash }).where(eq(users.id, uid))
+            db.update(users).set({ 
+                password: newPasswordHash,
+                tokenVersion: (user.tokenVersion || 0) + 1,  // 新增这行
+            }).where(eq(users.id, uid))
         );
         
         return c.json({ success: true });
