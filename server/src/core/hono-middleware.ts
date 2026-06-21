@@ -122,16 +122,24 @@ export const authMiddleware = createMiddleware<{
 
         if (token && jwt) {
             const profile = await profileAsync(c, "auth_verify", () => jwt.verify(token));
-            if (profile) {
+                        if (profile) {
                 const { users } = await import("../db/schema");
                 const user = await profileAsync(c, "auth_user_lookup", () => db.query.users.findFirst({
                     where: eq(users.id, profile.id)
                 }));
-
                 if (user) {
-                    c.set('uid', user.id);
-                    c.set('username', user.username);
-                    c.set('admin', user.permission === 1);
+                    // 检查 token 版本号是否匹配
+                    const userTokenVersion = user.tokenVersion || 0;
+                    const tokenVersion = profile.tokenVersion || 0;
+                    
+                    if (userTokenVersion !== tokenVersion) {
+                        // 版本号不匹配，token 已失效，清除 cookie
+                        clearJWTCookie(c);
+                    } else {
+                        c.set('uid', user.id);
+                        c.set('username', user.username);
+                        c.set('admin', user.permission === 1);
+                    }
                 }
             }
         }
