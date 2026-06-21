@@ -69,6 +69,7 @@ export const users = sqliteTable("users", {
     avatar: text("avatar"),
     password: text("password"),
     permission: integer("permission").default(0),
+    tokenVersion: integer("token_version").default(0),  // 新增这行
     createdAt: created_at,
     updatedAt: updated_at,
 });
