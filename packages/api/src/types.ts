@@ -74,6 +74,7 @@ export interface CreateFeedRequest {
   alias?: string;
   draft: boolean;
   listed: boolean;
+loginRequired?: boolean;  // 新增
   createdAt?: string;
   tags: string[];
 }
@@ -85,6 +86,7 @@ export interface UpdateFeedRequest {
   alias?: string;
   listed: boolean;
   draft?: boolean;
+loginRequired?: boolean;  // 新增
   createdAt?: string;
   tags?: string[];
   top?: number;
