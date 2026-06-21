@@ -43,11 +43,12 @@ export function PasswordChangeForm() {
                 return;
             }
 
-            setSuccess('密码修改成功！');
-            // 清空表单
-            setOldPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
+                        setSuccess('密码修改成功！正在跳转到登录页...');
+            
+            // 1 秒后跳转到登录页
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 1000);
         } catch (err) {
             setError('网络错误，请重试');
         } finally {
