@@ -380,6 +380,14 @@ class UserAPI {
     return this.http.put<{ success: boolean }>("/api/user/profile", body);
   }
 
+  // PUT /api/user/password
+  async changePassword(body: { 
+    oldPassword: string; 
+    newPassword: string 
+  }): Promise<ApiResponse<{ success: boolean }>> {
+    return this.http.put<{ success: boolean }>("/api/user/password", body);
+  }
+
   // POST /api/user/logout
   async logout(): Promise<ApiResponse<void>> {
     return this.http.post<void>("/api/user/logout");
