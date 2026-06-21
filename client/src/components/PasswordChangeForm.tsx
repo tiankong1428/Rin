@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { t } from 'i18next';
 import { client } from '../app/runtime';
 import { ButtonWithLoading } from './button';
 import { Input } from './input';
