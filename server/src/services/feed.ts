@@ -219,6 +219,11 @@ export function FeedService(): Hono<{
         if (feed.draft && feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
+        
+        // 仅登录可见的文章，未登录用户不能看
+        if (feed.loginRequired && !uid) {
+            return c.text('Login required', 401);
+        }
 
         const { hashtags, ...other } = feed;
         const hashtags_flatten = hashtags.map((f: any) => f.hashtag);
@@ -408,6 +413,7 @@ export function FeedService(): Hono<{
             draft: draft === undefined ? undefined : draft ? 1 : 0,
             // 只有管理员可以修改发布时间
             createdAt: admin && createdAt ? new Date(createdAt) : undefined,
+            loginRequired: body.loginRequired === undefined ? undefined : body.loginRequired ? 1 : 0,  // 新增
             updatedAt: updateTime
         }).where(eq(feeds.id, id_num)));
 
