@@ -134,8 +134,9 @@ export function WritingPage({ id }: { id?: number }) {
   const [alias, setAlias] = cache.useCache("alias", "");
   const [draft, setDraft] = useState(false);
   const [listed, setListed] = useState(true);
-  const [loginRequired, setLoginRequired] = useState(false);  // 新增
+    const [loginRequired, setLoginRequired] = useState(false);  // 新增
   const [content, setContent] = cache.useCache("content", "");
+  const [noPermission, setNoPermission] = useState(false);  // 新增：无权限状态
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
   const { showAlert, AlertUI } = useAlert()
@@ -206,9 +207,7 @@ export function WritingPage({ id }: { id?: number }) {
           if (data) {
             // 权限检查：不是自己的文章且不是管理员，禁止编辑
             if (data.uid !== profile?.id && !isAdmin) {
-              showAlert("无权限编辑此文章", () => {
-                window.location.href = "/";
-              });
+              setNoPermission(true);  // 改成设置错误状态，显示错误页面
               return;
             }
             // 获取本地草稿的最后修改时间
@@ -399,6 +398,34 @@ export function WritingPage({ id }: { id?: number }) {
           </div>
         </FlatPanel>
     )
+  }
+
+    // 无权限时显示错误页面
+  if (noPermission) {
+    return (
+      <>
+        <Helmet>
+          <title>{`无权限 - ${siteConfig.name}`}</title>
+          <meta property="og:site_name" content={siteName} />
+          <meta property="og:title" content="无权限" />
+          <meta property="og:image" content={siteConfig.avatar} />
+          <meta property="og:type" content="article" />
+          <meta property="og:url" content={document.URL} />
+        </Helmet>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="rounded-2xl bg-w p-8 text-center">
+            <h1 className="text-2xl font-bold t-primary">无权限编辑此文章</h1>
+            <p className="mt-2 text-sm text-neutral-500">你没有权限编辑这篇文章</p>
+            <button
+              onClick={() => (window.location.href = "/")}
+              className="mt-6 rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
+            >
+              返回首页
+            </button>
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (
