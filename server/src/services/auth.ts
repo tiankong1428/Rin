@@ -46,7 +46,7 @@ export function PasswordAuthService(): Hono<{
         // Check if this is the admin login
         if (username === adminUsername) {
             const expectedHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword));
-            
+
             if (hashedPassword !== expectedHash) {
                 throw new ForbiddenError('Invalid credentials');
             }
@@ -87,7 +87,9 @@ export function PasswordAuthService(): Hono<{
             }
 
             // Generate JWT token
-            const token = await profileAsync(c, 'auth_admin_token', () => jwt.sign({ id: user.id }));
+            const token = await profileAsync(c, 'auth_admin_token', () => 
+                jwt.sign({ id: user.id, tokenVersion: user.tokenVersion || 0 })
+            );
 
             // Set JWT cookie using Hono helper
             setJWTCookie(c, token);
@@ -118,7 +120,9 @@ export function PasswordAuthService(): Hono<{
         }
 
         // Generate JWT token
-        const token = await profileAsync(c, 'auth_user_token', () => jwt.sign({ id: user.id }));
+        const token = await profileAsync(c, 'auth_user_token', () => 
+            jwt.sign({ id: user.id, tokenVersion: user.tokenVersion || 0 })
+        );
 
         // Set JWT cookie using Hono helper
         setJWTCookie(c, token);
@@ -138,7 +142,7 @@ export function PasswordAuthService(): Hono<{
     // Check if password login is available
     app.get("/status", async (c: AppContext) => {
         const env = c.env;
-        
+
         return c.json({
             github: !!(env.RIN_GITHUB_CLIENT_ID && env.RIN_GITHUB_CLIENT_SECRET),
             password: !!(env.ADMIN_USERNAME && env.ADMIN_PASSWORD),
