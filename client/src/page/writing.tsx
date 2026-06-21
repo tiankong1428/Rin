@@ -136,7 +136,7 @@ export function WritingPage({ id }: { id?: number }) {
   const [listed, setListed] = useState(true);
     const [loginRequired, setLoginRequired] = useState(false);  // 新增
   const [content, setContent] = cache.useCache("content", "");
-  const [noPermission, setNoPermission] = useState(false);  // 新增：无权限状态
+  const [pageError, setPageError] = useState<string | null>(null);  // 新增：页面错误状态
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
   const { showAlert, AlertUI } = useAlert()
@@ -201,13 +201,13 @@ export function WritingPage({ id }: { id?: number }) {
         .get(id)
         .then(({ data, error }) => {
           if (error) {
-            showAlert(error.value as string);
+            setPageError(error.value as string);  // 改成设置错误状态，显示错误页面
             return;
           }
           if (data) {
             // 权限检查：不是自己的文章且不是管理员，禁止编辑
             if (data.uid !== profile?.id && !isAdmin) {
-              setNoPermission(true);  // 改成设置错误状态，显示错误页面
+              setPageError("无权限编辑此文章");  // 改成设置错误信息
               return;
             }
             // 获取本地草稿的最后修改时间
@@ -400,28 +400,58 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
-    // 无权限时显示错误页面
-  if (noPermission) {
+   // 有错误时显示错误页面
+  if (pageError) {
+    const isLoginRequired = pageError === "Login required";
+    const isNotFound = pageError === "Not found";
+    const isPermissionDenied = pageError === "Permission denied" || pageError.includes("无权限");
+
+    let title = pageError;
+    let desc = "";
+    let showLoginButton = false;
+
+    if (isLoginRequired) {
+      title = "请登录后查看";
+      desc = "这篇文章仅登录用户可见";
+      showLoginButton = true;
+    } else if (isNotFound) {
+      title = "文章不存在";
+      desc = "你访问的文章可能已被删除";
+    } else if (isPermissionDenied) {
+      title = "无权限编辑此文章";
+      desc = "你没有权限编辑这篇文章";
+    }
+
     return (
       <>
         <Helmet>
-          <title>{`无权限 - ${siteConfig.name}`}</title>
+          <title>{`${title} - ${siteConfig.name}`}</title>
           <meta property="og:site_name" content={siteName} />
-          <meta property="og:title" content="无权限" />
+          <meta property="og:title" content={title} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
           <meta property="og:url" content={document.URL} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-2xl bg-w p-8 text-center">
-            <h1 className="text-2xl font-bold t-primary">无权限编辑此文章</h1>
-            <p className="mt-2 text-sm text-neutral-500">你没有权限编辑这篇文章</p>
-            <button
-              onClick={() => (window.location.href = "/")}
-              className="mt-6 rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
-            >
-              返回首页
-            </button>
+            <h1 className="text-2xl font-bold t-primary">{title}</h1>
+            {desc && <p className="mt-2 text-sm text-neutral-500">{desc}</p>}
+            <div className="mt-6 flex gap-3 justify-center">
+              {showLoginButton && (
+                <button
+                  onClick={() => (window.location.href = "/login")}
+                  className="rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
+                >
+                  去登录
+                </button>
+              )}
+              <button
+                onClick={() => (window.location.href = "/")}
+                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+              >
+                返回首页
+              </button>
+            </div>
           </div>
         </div>
       </>
