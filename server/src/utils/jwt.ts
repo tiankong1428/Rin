@@ -23,7 +23,6 @@ export interface JWTUtils {
 
 export function createJWT(secret: string | Uint8Array | KeyLike): JWTUtils {
     if (!secret) throw new Error("Secret can't be empty");
-
     const key = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret;
     const alg = 'HS256';
 
@@ -31,20 +30,23 @@ export function createJWT(secret: string | Uint8Array | KeyLike): JWTUtils {
         sign: async (payload: any) => {
             const jwt = new SignJWT(payload)
                 .setProtectedHeader({ alg })
-                .setIssuedAt();
-            
+                .setIssuedAt()
+                .setExpirationTime('30d');  // 新增：30天有效期
+
             return jwt.sign(key);
         },
         verify: async (jwt?: string): Promise<any | false> => {
             if (!jwt) return false;
-
             try {
-                const data = (await jwtVerify(jwt, key)).payload;
+                const data = (await jwtVerify(jwt, key, {
+                    algorithms: ['HS256']  // 新增：指定算法
+                })).payload;
                 return data;
             } catch (_) {
                 return false;
             }
         }
+
     };
 }
 
