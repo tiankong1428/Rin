@@ -167,14 +167,27 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
         {error && (
           <>
             <div className="flex flex-col wauto rounded-2xl bg-w m-2 p-6 items-center justify-center space-y-2">
-              <h1 className="text-xl font-bold t-primary">{error}</h1>
+              <h1 className="text-xl font-bold t-primary">
+                {error === "Login required" ? "请登录后查看" : error}
+              </h1>
+              {error === "Login required" && (
+                <p className="text-sm text-neutral-500">这篇文章仅登录用户可见</p>
+              )}
               {error === "Not found" && id === "about" && (
                 <Tips value={t("about.notfound")} />
               )}
-              <Button
-                title={t("index.back")}
-                onClick={() => (window.location.href = "/")}
-              />
+              <div className="flex gap-3">
+                {error === "Login required" && (
+                  <Button
+                    title="去登录"
+                    onClick={() => (window.location.href = "/login")}
+                  />
+                )}
+                <Button
+                  title={t("index.back")}
+                  onClick={() => (window.location.href = "/")}
+                />
+              </div>
             </div>
           </>
         )}
