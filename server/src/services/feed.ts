@@ -157,7 +157,7 @@ export function FeedService(): Hono<{
             return c.text('User ID is required', 400);
         }
 
-        const result = await profileAsync(c, 'feed_create_insert', () => db.insert(feeds).values({
+                const result = await profileAsync(c, 'feed_create_insert', () => db.insert(feeds).values({
             title,
             content,
             summary,
@@ -168,6 +168,7 @@ export function FeedService(): Hono<{
             alias,
             listed: listed ? 1 : 0,
             draft: draft ? 1 : 0,
+            loginRequired: body.loginRequired ? 1 : 0,  // 新增
             createdAt: date,
             updatedAt: date
         }).returning({ insertedId: feeds.id }));
