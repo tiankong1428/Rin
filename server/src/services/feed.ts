@@ -131,7 +131,7 @@ export function FeedService(): Hono<{
         const body = await profileAsync(c, 'feed_create_parse', () => c.req.json());
         const { title, alias, listed, content, summary, draft, tags, createdAt } = body;
 
-    
+
 
         if (!title) {
             return c.text('Title is required', 400);
@@ -148,7 +148,10 @@ export function FeedService(): Hono<{
             return c.text('Content already exists', 400);
         }
 
-        const date = createdAt ? new Date(createdAt) : new Date();
+        // 只有管理员可以自定义发布时间，普通用户强制用当前时间
+        const date = admin && createdAt 
+            ? new Date(createdAt) 
+            : new Date();
 
         if (!uid) {
             return c.text('User ID is required', 400);
@@ -402,7 +405,8 @@ export function FeedService(): Hono<{
             top,
             listed: listed ? 1 : 0,
             draft: draft === undefined ? undefined : draft ? 1 : 0,
-            createdAt: createdAt ? new Date(createdAt) : undefined,
+            // 只有管理员可以修改发布时间
+            createdAt: admin && createdAt ? new Date(createdAt) : undefined,
             updatedAt: updateTime
         }).where(eq(feeds.id, id_num)));
 
