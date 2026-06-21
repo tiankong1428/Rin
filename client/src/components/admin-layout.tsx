@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ProfileContext } from "../state/profile";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
@@ -41,6 +43,8 @@ export function AdminLayout({
 }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
+  const profile = useContext(ProfileContext);
+  const isAdmin = profile?.permission ?? false;
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
@@ -57,26 +61,30 @@ export function AdminLayout({
               </div>
             </Link>
 
-            <div className="mt-6">
-              <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400 dark:text-neutral-500">
-                {t("admin.title")}
-              </p>
-              <div className="mt-3 flex flex-col gap-2">
-                <AdminNavItem href="/admin/writing" icon="ri-quill-pen-line" label={t("writing")} />
-                <AdminNavItem href="/admin/settings" icon="ri-settings-3-line" label={t("settings.title")} />
-                <AdminNavItem href="/admin/users" icon="ri-user-add-line" label="创建用户" />
-                <AdminNavItem href="/admin/health" icon="ri-heart-pulse-line" label={t("health.title")} />
-                <AdminNavItem href="/admin/queue-status" icon="ri-todo-line" label={t("queue_status.title")} />
-                <AdminNavItem href="/admin/compat-tasks" icon="ri-history-line" label={t("compat_tasks.title")} />
+                       {isAdmin && (
+              <div className="mt-6">
+                <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400 dark:text-neutral-500">
+                  {t("admin.title")}
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  <AdminNavItem href="/admin/writing" icon="ri-quill-pen-line" label={t("writing")} />
+                  <AdminNavItem href="/admin/settings" icon="ri-settings-3-line" label={t("settings.title")} />
+                  <AdminNavItem href="/admin/users" icon="ri-user-add-line" label="创建用户" />
+                  <AdminNavItem href="/admin/health" icon="ri-heart-pulse-line" label={t("health.title")} />
+                  <AdminNavItem href="/admin/queue-status" icon="ri-todo-line" label={t("queue_status.title")} />
+                  <AdminNavItem href="/admin/compat-tasks" icon="ri-history-line" label={t("compat_tasks.title")} />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </aside>
 
         <main className="min-w-0 flex-1">
           <div className="rounded-2xl border border-black/10 bg-w p-6 dark:border-white/10">
-            <div className="border-b border-black/5 pb-5 dark:border-white/5">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t("admin.title")}</p>
+             <div className="border-b border-black/5 pb-5 dark:border-white/5">
+              {isAdmin && (
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t("admin.title")}</p>
+              )}
               <h1 className="mt-2 text-3xl font-semibold tracking-[-0.03em] t-primary">{title}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">{description}</p>
             </div>
