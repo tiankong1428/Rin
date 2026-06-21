@@ -1,6 +1,7 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useContext, useEffect, useState} from "react";
+import { ProfileContext } from '../state/profile';
 import {Helmet} from "react-helmet";
 import {useTranslation} from "react-i18next";
 import Loading from 'react-loading';
@@ -131,6 +132,8 @@ export function WritingPage({ id }: { id?: number }) {
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
   const { showAlert, AlertUI } = useAlert()
+  const profile = useContext(ProfileContext);
+  const isAdmin = profile?.permission ?? false;
   function publishButton() {
     if (publishing) return;
     const tagsplit =
@@ -351,12 +354,14 @@ export function WritingPage({ id }: { id?: number }) {
                 placeholder={t('listed')}
               />
             </FlatMetaRow>
-            <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
-              <p className="mr-2 whitespace-nowrap">
-                {t('created_at')}
-              </p>
-              <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
-            </FlatMetaRow>
+                        {isAdmin && (
+              <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
+                <p className="mr-2 whitespace-nowrap">
+                  {t('created_at')}
+                </p>
+                <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
+              </FlatMetaRow>
+            )}
           </div>
         </FlatPanel>
     )
