@@ -6,6 +6,7 @@ import { client } from "../app/runtime";
 import { ImageUploadInput } from "../components/image-upload-input";
 import { Input } from "../components/input";
 import { ProfileContext } from "../state/profile";
+import { PasswordChangeForm } from '../components/PasswordChangeForm';
 
 
 export function ProfilePage() {
@@ -135,6 +136,9 @@ export function ProfilePage() {
                         />
                     </div>
                 </div>
+<div className="mt-8 pt-8 border-t border-gray-200">
+  <PasswordChangeForm />
+</div>
             </div>
         </div>
     );
