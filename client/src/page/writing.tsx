@@ -23,6 +23,7 @@ async function publish({
   summary,
   tags,
   draft,
+  loginRequired,  // 新增
   createdAt,
   onCompleted,
   showAlert
@@ -33,6 +34,7 @@ async function publish({
   summary: string;
   tags: string[];
   draft: boolean;
+  loginRequired: boolean;  // 新增
   alias?: string;
   createdAt?: Date;
   onCompleted?: () => void;
@@ -48,6 +50,7 @@ async function publish({
       tags,
       listed,
       draft,
+      loginRequired,  // 新增
       createdAt: createdAt?.toISOString(),
     }
   );
@@ -74,6 +77,7 @@ async function update({
   tags,
   listed,
   draft,
+  loginRequired,  // 新增
   createdAt,
   onCompleted,
   showAlert
@@ -86,6 +90,7 @@ async function update({
   summary?: string;
   tags?: string[];
   draft?: boolean;
+  loginRequired?: boolean;  // 新增
   createdAt?: Date;
   onCompleted?: () => void;
   showAlert: ShowAlertType;
@@ -101,6 +106,7 @@ async function update({
       tags,
       listed,
       draft,
+      loginRequired,  // 新增
       createdAt: createdAt?.toISOString(),
     }
   );
@@ -128,6 +134,7 @@ export function WritingPage({ id }: { id?: number }) {
   const [alias, setAlias] = cache.useCache("alias", "");
   const [draft, setDraft] = useState(false);
   const [listed, setListed] = useState(true);
+  const [loginRequired, setLoginRequired] = useState(false);  // 新增
   const [content, setContent] = cache.useCache("content", "");
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
@@ -152,6 +159,7 @@ export function WritingPage({ id }: { id?: number }) {
         tags: tagsplit,
         draft,
         listed,
+        loginRequired,  // 新增
         createdAt,
         onCompleted: () => {
           setPublishing(false)
@@ -176,6 +184,7 @@ export function WritingPage({ id }: { id?: number }) {
         draft,
         alias,
         listed,
+        loginRequired,  // 新增
         createdAt,
         onCompleted: () => {
           setPublishing(false)
@@ -238,6 +247,7 @@ export function WritingPage({ id }: { id?: number }) {
             // 这几个字段每次都用服务器的（因为没缓存）
             setListed((data as any).listed === 1);
             setDraft((data as any).draft === 1);
+            setLoginRequired((data as any).loginRequired === 1);  // 新增
             setCreatedAt(new Date(data.createdAt));
           }
         });
@@ -354,6 +364,18 @@ export function WritingPage({ id }: { id?: number }) {
                 placeholder={t('listed')}
               />
             </FlatMetaRow>
+{/* 新增：仅登录可见 */}
+            <FlatMetaRow
+              className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
+              onClick={() => setLoginRequired(!loginRequired)}
+            >
+              <p>仅登录可见</p>
+              <Checkbox
+                id="loginRequired"
+                value={loginRequired}
+                setValue={setLoginRequired}
+                placeholder="仅登录可见"
+              />
                         {isAdmin && (
               <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
                 <p className="mr-2 whitespace-nowrap">
