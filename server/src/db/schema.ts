@@ -16,6 +16,7 @@ export const feeds = sqliteTable("feeds", {
     listed: integer("listed").default(1).notNull(),
     draft: integer("draft").default(1).notNull(),
     top: integer("top").default(0).notNull(),
+    loginRequired: integer("login_required").default(0).notNull(),  // 新增：仅登录可见
     uid: integer("uid").references(() => users.id).notNull(),
     createdAt: created_at,
     updatedAt: updated_at,
