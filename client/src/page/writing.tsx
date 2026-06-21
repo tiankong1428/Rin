@@ -182,7 +182,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
-    useEffect(() => {
+      useEffect(() => {
     if (id) {
       client.feed
         .get(id)
@@ -193,42 +193,49 @@ export function WritingPage({ id }: { id?: number }) {
             // 获取服务器的最后更新时间
             const serverUpdatedAt = new Date(data.updatedAt).getTime();
             
-            // 判断：本地有草稿，而且本地草稿比服务器新
-            const hasLocalNewerDraft = 
-              localModifiedAt !== null && localModifiedAt > serverUpdatedAt;
-            
-            if (hasLocalNewerDraft) {
-              // 本地草稿更新，弹窗问用户用哪个
-              const useLocal = confirm(
-                "检测到您有未保存的本地草稿，比服务器版本新。\n\n" +
-                "点击「确定」：继续编辑本地草稿\n" +
-                "点击「取消」：加载服务器最新版本"
+            if (localModifiedAt === null) {
+              // 情况 1：本地没有草稿 → 直接用服务器的，不弹窗
+              if (data.title) setTitle(data.title);
+              if (data.content) setContent(data.content);
+              if (data.hashtags) {
+                setTags(data.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+              }
+              if ((data as any).alias) setAlias((data as any).alias);
+              if ((data as any).summary) setSummary((data as any).summary || "");
+              
+              // 同步时间戳
+              cache.touchModifiedAt();
+            } 
+            else if (serverUpdatedAt > localModifiedAt) {
+              // 情况 2：服务器版本更新 → 弹窗问用户要不要用服务器的
+              const useServer = confirm(
+                "检测到服务器上有更新的版本。\n\n" +
+                "点击「确定」：加载服务器最新版本\n" +
+                "点击「取消」：继续编辑本地草稿"
               );
               
-              if (useLocal) {
-                // 用户选择用本地草稿，只更新这几个没缓存的字段
-                setListed((data as any).listed === 1);
-                setDraft((data as any).draft === 1);
-                setCreatedAt(new Date(data.createdAt));
-                return;
+              if (useServer) {
+                // 用户选确定，用服务器版本覆盖本地
+                if (data.title) setTitle(data.title);
+                if (data.content) setContent(data.content);
+                if (data.hashtags) {
+                  setTags(data.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+                }
+                if ((data as any).alias) setAlias((data as any).alias);
+                if ((data as any).summary) setSummary((data as any).summary || "");
+                
+                // 把本地草稿时间戳同步成服务器的时间
+                cache.touchModifiedAt();
               }
+              // 用户选取消，什么都不做，继续用本地草稿
             }
             
-            // 用服务器最新版本
-            if (data.title) setTitle(data.title);
-            if (data.content) setContent(data.content);
-            if (data.hashtags) {
-              setTags(data.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
-            }
-            if ((data as any).alias) setAlias((data as any).alias);
-            if ((data as any).summary) setSummary((data as any).summary || "");
+            // 情况 3：本地草稿更新，或者时间一样 → 什么都不做，继续用本地的
             
+            // 这几个字段每次都用服务器的（因为没缓存）
             setListed((data as any).listed === 1);
             setDraft((data as any).draft === 1);
             setCreatedAt(new Date(data.createdAt));
-            
-            // 把本地草稿时间戳同步成服务器的时间
-            cache.touchModifiedAt();
           }
         });
     }
