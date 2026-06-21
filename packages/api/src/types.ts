@@ -38,6 +38,7 @@ export interface Feed {
   pv: number;
   uv: number;
   top?: number;
+loginRequired?: number;  // 新增
 }
 
 export interface FeedListResponse {
