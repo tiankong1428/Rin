@@ -135,15 +135,16 @@ export function MomentsService(): Hono {
             return c.text('Unauthorized', 401);
         }
         
-        if (!admin) {
-            return c.text('Permission denied', 403);
-        }
-        
         const id_num = parseInt(id);
         const moment = await profileAsync(c, 'moments_delete_lookup', () => db.query.moments.findFirst({ where: eq(moments.id, id_num) }));
         
         if (!moment) {
             return c.text('Not found', 404);
+        }
+        
+        // 只有作者本人或管理员可以删除
+        if (moment.uid !== uid && !admin) {
+            return c.text('Permission denied', 403);
         }
         
         await profileAsync(c, 'moments_delete_db', () => db.delete(moments).where(eq(moments.id, id_num)));
