@@ -49,10 +49,6 @@ export function FeedService(): Hono<{
         const limit = c.req.query('limit');
         const type = c.req.query('type');
 
-        if ((type === 'draft' || type === 'unlisted') && !admin) {
-            return c.text('Permission denied', 403);
-        }
-
         const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
         const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
         const cacheKey = `feeds_${type}_${page_num}_${limit_num}`;
@@ -62,11 +58,24 @@ export function FeedService(): Hono<{
             return c.json(cached);
         }
 
-        const where = type === 'draft'
-            ? eq(feeds.draft, 1)
-            : type === 'unlisted'
-                ? and(eq(feeds.draft, 0), eq(feeds.listed, 0))
-                : and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+                // 未登录用户不能访问草稿和未列出
+        if ((type === 'draft' || type === 'unlisted') && !uid) {
+            return c.text('Permission denied', 403);
+        }
+
+        // 草稿和未列出：管理员看所有，普通用户只看自己的
+        let where;
+        if (type === 'draft') {
+            where = admin 
+                ? eq(feeds.draft, 1) 
+                : and(eq(feeds.draft, 1), eq(feeds.uid, uid));
+        } else if (type === 'unlisted') {
+            where = admin 
+                ? and(eq(feeds.draft, 0), eq(feeds.listed, 0)) 
+                : and(eq(feeds.draft, 0), eq(feeds.listed, 0), eq(feeds.uid, uid));
+        } else {
+            where = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+        }
 
         const size = await profileAsync(c, 'feed_list_count', () => db.select({ count: count() }).from(feeds).where(where));
 
