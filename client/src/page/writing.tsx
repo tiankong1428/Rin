@@ -195,10 +195,14 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
-      useEffect(() => {
-    if (id) {
-            client.feed
-        .get(id)
+  // 检查登录状态，未登录显示错误页面
+  useEffect(() => {
+    if (!profile) {
+      setPageError("Login required");
+    } else if (pageError === "Login required") {
+      setPageError(null);
+    }
+  }, [profile]);
         .then(({ data, error }) => {
           if (error) {
             setPageError(error.value as string);  // 改成设置错误状态，显示错误页面
