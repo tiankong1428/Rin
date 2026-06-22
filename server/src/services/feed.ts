@@ -8,7 +8,13 @@ import { extractImageWithMetadata } from "../utils/image";
 import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
+
 export { clearFeedCache } from "./clear-feed-cache";
+
+// 生成随机 alias（8位随机字符串）
+function generateRandomAlias(): string {
+    return Math.random().toString(36).substring(2, 10);
+}
 
 // Lazy-loaded modules for WordPress import
 let XMLParser: any;
@@ -100,11 +106,9 @@ export function FeedService(): Hono<{
         }
 
         const data = { size: size[0].count, data: feed_list, hasNext };
-
         if (type === undefined || type === 'normal' || type === '') {
             await profileAsync(c, 'feed_list_cache_set', () => cache.set(cacheKey, data));
         }
-
         return c.json(data);
     });
 
@@ -112,7 +116,6 @@ export function FeedService(): Hono<{
     app.get('/timeline', async (c) => {
         const db = c.get('db');
         const where = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
-
         return c.json(await profileAsync(c, 'feed_timeline_db', () => db.query.feeds.findMany({
             where: where,
             columns: { id: true, title: true, createdAt: true },
@@ -131,8 +134,6 @@ export function FeedService(): Hono<{
         const body = await profileAsync(c, 'feed_create_parse', () => c.req.json());
         const { title, alias, listed, content, summary, draft, tags, createdAt } = body;
 
-
-
         if (!title) {
             return c.text('Title is required', 400);
         }
@@ -143,7 +144,6 @@ export function FeedService(): Hono<{
         const exist = await profileAsync(c, 'feed_create_existing', () => db.query.feeds.findFirst({
             where: or(eq(feeds.title, title), eq(feeds.content, content))
         }));
-
         if (exist) {
             return c.text('Content already exists', 400);
         }
@@ -157,7 +157,13 @@ export function FeedService(): Hono<{
             return c.text('User ID is required', 400);
         }
 
-                const result = await profileAsync(c, 'feed_create_insert', () => db.insert(feeds).values({
+        // 未列出的文章如果没填 alias，自动生成随机 alias
+        let finalAlias = alias;
+        if (!listed && !alias) {
+            finalAlias = generateRandomAlias();
+        }
+
+        const result = await profileAsync(c, 'feed_create_insert', () => db.insert(feeds).values({
             title,
             content,
             summary,
@@ -165,10 +171,10 @@ export function FeedService(): Hono<{
             ai_summary_status: "idle",
             ai_summary_error: "",
             uid,
-            alias,
+            alias: finalAlias,
             listed: listed ? 1 : 0,
             draft: draft ? 1 : 0,
-            loginRequired: body.loginRequired ? 1 : 0,  // 新增
+            loginRequired: body.loginRequired ? 1 : 0,
             createdAt: date,
             updatedAt: date
         }).returning({ insertedId: feeds.id }));
@@ -197,8 +203,9 @@ export function FeedService(): Hono<{
         const uid = c.get('uid');
         const id = c.req.param('id');
         const id_num = parseInt(id);
-        const cacheKey = `feed_${id}`;
+        const isNumericId = !isNaN(id_num);
 
+        const cacheKey = `feed_${id}`;
         const feed = await profileAsync(c, 'feed_detail_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findFirst({
             where: or(eq(feeds.id, id_num), eq(feeds.alias, id)),
             with: {
@@ -219,7 +226,12 @@ export function FeedService(): Hono<{
         if (feed.draft && feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
-        
+
+        // 未列出的文章，非作者/管理员不能通过数字 ID 访问，只能通过 alias 访问
+        if (feed.listed === 0 && feed.uid !== uid && !admin && isNumericId) {
+            return c.text('Not found', 404);
+        }
+
         // 仅登录可见的文章，未登录用户不能看
         if (feed.loginRequired && !uid) {
             return c.text('Login required', 401);
@@ -313,6 +325,7 @@ export function FeedService(): Hono<{
                     : feed.content.length > 50
                         ? feed.content.slice(0, 50)
                         : feed.content;
+
                 const cacheKey = `${feed.id}_${feedDirection}_${id_num}`;
                 const cacheData = {
                     id: feed.id,
@@ -400,6 +413,12 @@ export function FeedService(): Hono<{
         const shouldQueueAISummary = (contentChanged && !isDraft) || (!isDraft && feed.draft === 1 && !feed.ai_summary);
         const updateTime = new Date();
 
+        // 改成未列出且没有 alias 时，自动生成随机 alias
+        let finalAlias = alias;
+        if (listed === false && !alias && !feed.alias) {
+            finalAlias = generateRandomAlias();
+        }
+
         await profileAsync(c, 'feed_update_db', () => db.update(feeds).set({
             title,
             content,
@@ -407,13 +426,13 @@ export function FeedService(): Hono<{
             ai_summary: shouldQueueAISummary ? "" : undefined,
             ai_summary_status: isDraft ? "idle" : undefined,
             ai_summary_error: shouldQueueAISummary || isDraft ? "" : undefined,
-            alias,
+            alias: finalAlias,
             top,
             listed: listed ? 1 : 0,
             draft: draft === undefined ? undefined : draft ? 1 : 0,
             // 只有管理员可以修改发布时间
             createdAt: admin && createdAt ? new Date(createdAt) : undefined,
-            loginRequired: body.loginRequired === undefined ? undefined : body.loginRequired ? 1 : 0,  // 新增
+            loginRequired: body.loginRequired === undefined ? undefined : body.loginRequired ? 1 : 0,
             updatedAt: updateTime
         }).where(eq(feeds.id, id_num)));
 
@@ -429,7 +448,7 @@ export function FeedService(): Hono<{
             }));
         }
 
-        await profileAsync(c, 'feed_update_cache_invalidate', () => clearFeedCache(cache, id_num, feed.alias, alias || null));
+        await profileAsync(c, 'feed_update_cache_invalidate', () => clearFeedCache(cache, id_num, feed.alias, finalAlias || null));
         return c.text('Updated');
     });
 
@@ -482,6 +501,7 @@ export function FeedService(): Hono<{
         await profileAsync(c, 'feed_delete_cache_invalidate', () => clearFeedCache(cache, id_num, feed.alias, null));
         return c.text('Deleted');
     });
+
     return app;
 }
 
@@ -504,6 +524,7 @@ export function SearchService(): Hono<{
         let keyword = c.req.param('keyword');
 
         keyword = decodeURI(keyword);
+
         const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
         const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
 
@@ -511,8 +532,10 @@ export function SearchService(): Hono<{
             return c.json({ size: 0, data: [], hasNext: false });
         }
 
-        const cacheKey = `search_${keyword}`;
+        // 缓存 key 区分管理员和普通用户，避免缓存污染
+        const cacheKey = `search_${keyword}_${admin ? 'admin' : 'guest'}`;
         const searchKeyword = `%${keyword}%`;
+
         const whereClause = or(
             like(feeds.title, searchKeyword),
             like(feeds.content, searchKeyword),
@@ -520,8 +543,13 @@ export function SearchService(): Hono<{
             like(feeds.alias, searchKeyword)
         );
 
+        // 普通用户搜索时，只搜已发布且公开的文章（过滤草稿和未列出）
+        const finalWhere = admin 
+            ? whereClause 
+            : and(whereClause, eq(feeds.draft, 0), eq(feeds.listed, 1));
+
         const feed_list = (await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findMany({
-            where: admin ? whereClause : and(whereClause, eq(feeds.draft, 0)),
+            where: finalWhere,
             columns: admin ? undefined : { draft: false, listed: false },
             with: {
                 hashtags: {
@@ -551,9 +579,9 @@ export function SearchService(): Hono<{
             });
         }
     });
+
     return app;
 }
-
 
 export function WordPressService(): Hono<{
     Bindings: Env;
@@ -586,8 +614,8 @@ export function WordPressService(): Hono<{
         const xml = await profileAsync(c, 'wp_import_read', () => data.text());
         const parser = new XMLParser();
         const result = await profileAsync(c, 'wp_import_xml_parse', () => parser.parse(xml));
-        const items = result.rss.channel.item;
 
+        const items = result.rss.channel.item;
         if (!items) {
             return c.text('No items found', 404);
         }
@@ -599,8 +627,8 @@ export function WordPressService(): Hono<{
             const contentHtml = item?.['content:encoded'];
             const content = html2md(contentHtml);
             const summary = content.length > 100 ? content.slice(0, 100) : content;
-            let tags = item?.['category'];
 
+            let tags = item?.['category'];
             if (tags && Array.isArray(tags)) {
                 tags = tags.map((tag: any) => tag + '');
             } else if (tags && typeof tags === 'string') {
@@ -651,12 +679,14 @@ export function WordPressService(): Hono<{
                 const tags = item.tags;
                 await profileAsync(c, 'wp_import_tags', () => bindTagToPost(db, result[0].insertedId, tags));
             }
+
             success++;
         }
 
         await profileAsync(c, 'wp_import_cache_invalidate', () => cache.deletePrefix('feeds_'));
         return c.json({ success, skipped, skippedList });
     });
+
     return app;
 }
 
