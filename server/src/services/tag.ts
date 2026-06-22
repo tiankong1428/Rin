@@ -40,7 +40,7 @@ export function TagService(): Hono {
                                     );
                                 }
                             }
-                        }
+                        } as any
                     }
                 }
             }
