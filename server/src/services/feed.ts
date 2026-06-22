@@ -45,6 +45,7 @@ export function FeedService(): Hono<{
         const db = c.get('db');
         const cache = c.get('cache');
         const admin = c.get('admin');
+        const uid = c.get('uid');
         const page = c.req.query('page');
         const limit = c.req.query('limit');
         const type = c.req.query('type');
