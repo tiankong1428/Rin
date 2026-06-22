@@ -81,7 +81,7 @@ export function FeedsPage() {
                 <meta property="og:type" content="article" />
                 <meta property="og:url" content={document.URL} />
             </Helmet>
-            <Waiting for={feeds.draft.size + feeds.normal.size + feeds.unlisted.size > 0 || status === 'idle'}>
+                <Waiting for={feeds.draft.size + feeds.normal.size + feeds.unlisted.size > 0 || status === 'idle' || status === 'error'}>
                 <main className="w-full flex flex-col justify-center items-center mb-8">
                     <div className="wauto text-start text-black dark:text-white py-4 text-4xl font-bold">
                         <p>
@@ -91,7 +91,7 @@ export function FeedsPage() {
                             <p className="text-sm mt-4 text-neutral-500 font-normal">
                                 {t('article.total$count', { count: feeds[listState]?.size })}
                             </p>
-                            {profile?.permission &&
+                                                        {profile &&
                                 <div className="flex flex-row space-x-4">
                                     <Link href={listState === 'draft' ? '/?type=normal' : '/?type=draft'} className={`text-sm mt-4 text-neutral-500 font-normal ${listState === 'draft' ? "text-theme" : ""}`}>
                                         {t('draft_bin')}
