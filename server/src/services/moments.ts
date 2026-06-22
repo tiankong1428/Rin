@@ -81,7 +81,7 @@ export function MomentsService(): Hono {
         }
     });
 
-    // POST /moments/:id
+    // POST /moments/:id - 编辑动态（只有管理员）
     app.post('/:id', async (c: AppContext) => {
         const db = c.get('db');
         const cache = c.get('cache');
@@ -94,16 +94,16 @@ export function MomentsService(): Hono {
         if (!uid) {
             return c.text('Unauthorized', 401);
         }
-const id_num = parseInt(id);
-        const moment = await profileAsync(c, 'moments_delete_lookup', () => db.query.moments.findFirst({ where: eq(moments.id, id_num) }));
+        
+        if (!admin) {
+            return c.text('Permission denied', 403);
+        }
+        
+        const id_num = parseInt(id);
+        const moment = await profileAsync(c, 'moments_update_lookup', () => db.query.moments.findFirst({ where: eq(moments.id, id_num) }));
         
         if (!moment) {
             return c.text('Not found', 404);
-        }
-        
-        // 只有作者本人或管理员可以删除
-        if (moment.uid !== uid && !admin) {
-            return c.text('Permission denied', 403);
         }
         
         if (!content) {
@@ -119,7 +119,7 @@ const id_num = parseInt(id);
         return c.text('Updated');
     });
 
-    // DELETE /moments/:id
+    // DELETE /moments/:id - 删除动态（作者本人或管理员）
     app.delete('/:id', async (c: AppContext) => {
         const db = c.get('db');
         const cache = c.get('cache');
@@ -131,15 +131,16 @@ const id_num = parseInt(id);
             return c.text('Unauthorized', 401);
         }
         
-        if (!admin) {
-            return c.text('Permission denied', 403);
-        }
-        
         const id_num = parseInt(id);
         const moment = await profileAsync(c, 'moments_delete_lookup', () => db.query.moments.findFirst({ where: eq(moments.id, id_num) }));
         
         if (!moment) {
             return c.text('Not found', 404);
+        }
+        
+        // 只有作者本人或管理员可以删除
+        if (moment.uid !== uid && !admin) {
+            return c.text('Permission denied', 403);
         }
         
         await profileAsync(c, 'moments_delete_db', () => db.delete(moments).where(eq(moments.id, id_num)));
