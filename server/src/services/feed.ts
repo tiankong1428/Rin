@@ -69,11 +69,11 @@ export function FeedService(): Hono<{
         if (type === 'draft') {
             where = admin 
                 ? eq(feeds.draft, 1) 
-                : and(eq(feeds.draft, 1), eq(feeds.uid, uid));
+                : and(eq(feeds.draft, 1), eq(feeds.uid, uid!));
         } else if (type === 'unlisted') {
             where = admin 
                 ? and(eq(feeds.draft, 0), eq(feeds.listed, 0)) 
-                : and(eq(feeds.draft, 0), eq(feeds.listed, 0), eq(feeds.uid, uid));
+                : and(eq(feeds.draft, 0), eq(feeds.listed, 0), eq(feeds.uid, uid!));
         } else {
             where = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
         }
