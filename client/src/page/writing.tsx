@@ -194,7 +194,6 @@ export function WritingPage({ id }: { id?: number }) {
       });
     }
   }
-
   // 检查登录状态，未登录显示错误页面
   useEffect(() => {
     if (!profile) {
@@ -203,6 +202,10 @@ export function WritingPage({ id }: { id?: number }) {
       setPageError(null);
     }
   }, [profile]);
+      useEffect(() => {
+    if (id) {
+            client.feed
+        .get(id)
         .then(({ data, error }) => {
           if (error) {
             setPageError(error.value as string);  // 改成设置错误状态，显示错误页面
