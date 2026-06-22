@@ -52,30 +52,37 @@ export function FeedService(): Hono<{
 
         const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
         const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
-        const cacheKey = `feeds_${type}_${page_num}_${limit_num}`;
-        const cached = await profileAsync(c, 'feed_list_cache_get', () => cache.get(cacheKey));
 
+        // 首页列表区分登录/未登录缓存，避免未登录用户缓存后登录用户看不到仅登录可见的
+        const cacheKey = type === undefined || type === 'normal' || type === ''
+            ? `feeds_${type}_${page_num}_${limit_num}_${uid ? 'login' : 'guest'}`
+            : `feeds_${type}_${page_num}_${limit_num}`;
+
+        const cached = await profileAsync(c, 'feed_list_cache_get', () => cache.get(cacheKey));
         if (cached) {
             return c.json(cached);
         }
 
-                // 未登录用户不能访问草稿和未列出
+        // 未登录用户不能访问草稿和未列出
         if ((type === 'draft' || type === 'unlisted') && !uid) {
             return c.text('Permission denied', 403);
         }
 
-        // 草稿和未列出：管理员看所有，普通用户只看自己的
+        // 草稿：所有人都只能看自己的（包括管理员）
+        // 未列出：管理员看所有，普通用户只看自己的
+        // 首页：未登录用户看不到仅登录可见的
         let where;
         if (type === 'draft') {
-            where = admin 
-                ? eq(feeds.draft, 1) 
-                : and(eq(feeds.draft, 1), eq(feeds.uid, uid!));
+            where = and(eq(feeds.draft, 1), eq(feeds.uid, uid!));
         } else if (type === 'unlisted') {
             where = admin 
                 ? and(eq(feeds.draft, 0), eq(feeds.listed, 0)) 
                 : and(eq(feeds.draft, 0), eq(feeds.listed, 0), eq(feeds.uid, uid!));
         } else {
-            where = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+            // 首页列表：未登录用户过滤掉仅登录可见的
+            where = uid
+                ? and(eq(feeds.draft, 0), eq(feeds.listed, 1))
+                : and(eq(feeds.draft, 0), eq(feeds.listed, 1), eq(feeds.loginRequired, 0));
         }
 
         const size = await profileAsync(c, 'feed_list_count', () => db.select({ count: count() }).from(feeds).where(where));
@@ -125,7 +132,13 @@ export function FeedService(): Hono<{
     // GET /feed/timeline
     app.get('/timeline', async (c) => {
         const db = c.get('db');
-        const where = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+        const uid = c.get('uid');
+        
+        // 未登录用户看不到仅登录可见的
+        const where = uid
+            ? and(eq(feeds.draft, 0), eq(feeds.listed, 1))
+            : and(eq(feeds.draft, 0), eq(feeds.listed, 1), eq(feeds.loginRequired, 0));
+
         return c.json(await profileAsync(c, 'feed_timeline_db', () => db.query.feeds.findMany({
             where: where,
             columns: { id: true, title: true, createdAt: true },
@@ -233,7 +246,8 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.draft && feed.uid !== uid && !admin) {
+        // 草稿：只有作者本人能看，管理员也不能看别人的草稿
+        if (feed.draft && feed.uid !== uid) {
             return c.text('Permission denied', 403);
         }
 
@@ -303,6 +317,7 @@ export function FeedService(): Hono<{
     app.get("/adjacent/:id", async (c) => {
         const db = c.get('db');
         const cache = c.get('cache');
+        const uid = c.get('uid');
         const id = c.req.param('id');
         let id_num: number;
 
@@ -351,13 +366,18 @@ export function FeedService(): Hono<{
             return null;
         }
 
+        // 相邻文章：未登录用户过滤掉仅登录可见的
+        const baseWhere = uid
+            ? and(eq(feeds.draft, 0), eq(feeds.listed, 1))
+            : and(eq(feeds.draft, 0), eq(feeds.listed, 1), eq(feeds.loginRequired, 0));
+
         const getPreviousFeed = async () => {
             const previousFeedCached = await profileAsync(c, 'feed_adjacent_prev_cache', () => cache.getBySuffix(`previous_feed_${id_num}`));
             if (previousFeedCached && previousFeedCached.length > 0) {
                 return previousFeedCached[0];
             } else {
                 const tempPreviousFeed = await profileAsync(c, 'feed_adjacent_prev_db', () => db.query.feeds.findFirst({
-                    where: and(and(eq(feeds.draft, 0), eq(feeds.listed, 1)), lt(feeds.createdAt, created_at)),
+                    where: and(baseWhere, lt(feeds.createdAt, created_at)),
                     orderBy: [desc(feeds.createdAt)],
                     with: {
                         hashtags: {
@@ -377,7 +397,7 @@ export function FeedService(): Hono<{
                 return nextFeedCached[0];
             } else {
                 const tempNextFeed = await profileAsync(c, 'feed_adjacent_next_db', () => db.query.feeds.findFirst({
-                    where: and(and(eq(feeds.draft, 0), eq(feeds.listed, 1)), gt(feeds.createdAt, created_at)),
+                    where: and(baseWhere, gt(feeds.createdAt, created_at)),
                     orderBy: [asc(feeds.createdAt)],
                     with: {
                         hashtags: {
@@ -414,7 +434,10 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.uid !== uid && !admin) {
+        // 草稿只有作者本人能编辑，管理员也不能编辑别人的草稿
+        // 非草稿：作者本人和管理员都能编辑
+        const canEdit = feed.uid === uid || (!feed.draft && admin);
+        if (!canEdit) {
             return c.text('Permission denied', 403);
         }
 
@@ -479,7 +502,9 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.uid !== uid && !admin) {
+        // 草稿只有作者本人能操作，管理员也不能操作别人的草稿
+        const canTop = feed.uid === uid || (!feed.draft && admin);
+        if (!canTop) {
             return c.text('Permission denied', 403);
         }
 
@@ -503,7 +528,10 @@ export function FeedService(): Hono<{
             return c.text('Not found', 404);
         }
 
-        if (feed.uid !== uid && !admin) {
+        // 草稿只有作者本人能删，管理员也不能删别人的草稿
+        // 非草稿：作者本人和管理员都能删
+        const canDelete = feed.uid === uid || (!feed.draft && admin);
+        if (!canDelete) {
             return c.text('Permission denied', 403);
         }
 
@@ -529,6 +557,7 @@ export function SearchService(): Hono<{
         const db = c.get('db');
         const cache = c.get('cache');
         const admin = c.get('admin');
+        const uid = c.get('uid');
         const page = c.req.query('page');
         const limit = c.req.query('limit');
         let keyword = c.req.param('keyword');
@@ -542,8 +571,8 @@ export function SearchService(): Hono<{
             return c.json({ size: 0, data: [], hasNext: false });
         }
 
-        // 缓存 key 区分管理员和普通用户，避免缓存污染
-        const cacheKey = `search_${keyword}_${admin ? 'admin' : 'guest'}`;
+        // 缓存 key 加 uid，因为搜索结果包含自己的草稿，每个人不一样
+        const cacheKey = `search_${keyword}_${uid ? uid : 'guest'}`;
         const searchKeyword = `%${keyword}%`;
 
         const whereClause = or(
@@ -553,10 +582,38 @@ export function SearchService(): Hono<{
             like(feeds.alias, searchKeyword)
         );
 
-        // 普通用户搜索时，只搜已发布且公开的文章（过滤草稿和未列出）
-        const finalWhere = admin 
-            ? whereClause 
-            : and(whereClause, eq(feeds.draft, 0), eq(feeds.listed, 1));
+        // 搜索权限：
+        // 未登录：只能搜公开且非仅登录可见的
+        // 普通用户：能搜公开的（包括仅登录可见） + 自己的草稿
+        // 管理员：能搜所有非草稿的（公开、未列出、仅登录可见） + 自己的草稿
+        let finalWhere;
+        if (!uid) {
+            // 未登录
+            finalWhere = and(
+                whereClause,
+                eq(feeds.draft, 0),
+                eq(feeds.listed, 1),
+                eq(feeds.loginRequired, 0)
+            );
+        } else if (admin) {
+            // 管理员
+            finalWhere = and(
+                whereClause,
+                or(
+                    eq(feeds.draft, 0),
+                    and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                )
+            );
+        } else {
+            // 普通用户
+            finalWhere = and(
+                whereClause,
+                or(
+                    and(eq(feeds.draft, 0), eq(feeds.listed, 1)),
+                    and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                )
+            );
+        }
 
         const feed_list = (await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findMany({
             where: finalWhere,
