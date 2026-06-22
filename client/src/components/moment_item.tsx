@@ -18,12 +18,14 @@ export function MomentItem({
     moment, 
     onDelete,
     onEdit,
-    canManage
+    canEdit,
+    canDelete
 }: { 
     moment: Moment, 
     onDelete: (id: number) => void,
     onEdit: (moment: Moment) => void,
-    canManage: boolean
+    canEdit: boolean,
+    canDelete: boolean
 }) {
     const { t } = useTranslation()
     const { createdAt, updatedAt } = moment;
@@ -53,23 +55,27 @@ export function MomentItem({
                         </p>
                     </div>
                 </div>
-                {canManage && (
+                {(canEdit || canDelete) && (
                     <div>
                         <div className="flex gap-2">
-                            <button
-                                aria-label={t("edit")}
-                                onClick={() => onEdit(moment)}
-                                className="flex-1 flex flex-col items-end justify-center px-2 py bg-secondary bg-button rounded-full transition"
-                            >
-                                <i className="ri-edit-2-line dark:text-neutral-400" />
-                            </button>
-                            <button
-                                aria-label={t("delete.title")}
-                                onClick={() => onDelete(moment.id)}
-                                className="flex-1 flex flex-col items-end justify-center px-2 py bg-secondary bg-button rounded-full transition"
-                            >
-                                <i className="ri-delete-bin-7-line text-red-500" />
-                            </button>
+                            {canEdit && (
+                                <button
+                                    aria-label={t("edit")}
+                                    onClick={() => onEdit(moment)}
+                                    className="flex-1 flex flex-col items-end justify-center px-2 py bg-secondary bg-button rounded-full transition"
+                                >
+                                    <i className="ri-edit-2-line dark:text-neutral-400" />
+                                </button>
+                            )}
+                            {canDelete && (
+                                <button
+                                    aria-label={t("delete.title")}
+                                    onClick={() => onDelete(moment.id)}
+                                    className="flex-1 flex flex-col items-end justify-center px-2 py bg-secondary bg-button rounded-full transition"
+                                >
+                                    <i className="ri-delete-bin-7-line text-red-500" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
