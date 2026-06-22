@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { Hono } from "hono";
 import type { DB } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
@@ -8,30 +8,68 @@ import type { AppContext } from "../core/hono-types";
 export function TagService(): Hono {
     const app = new Hono();
 
-    // GET /tag
+    // GET /tag - 标签列表
     app.get('/', async (c: AppContext) => {
         const db = c.get('db');
-        
+        const admin = c.get('admin');
+        const uid = c.get('uid');
+
         const tag_list = await profileAsync(c, 'tag_list_db', () => db.query.hashtags.findMany({
             with: {
-                feeds: { columns: { feedId: true } }
+                feeds: {
+                    columns: { feedId: true },
+                    with: {
+                        feed: {
+                            columns: { id: true },
+                            // 只查出用户能看到的文章
+                            where: (feeds: any) => {
+                                if (!uid) {
+                                    // 未登录：只能看公开且非仅登录可见的
+                                    return and(eq(feeds.draft, 0), eq(feeds.listed, 1), eq(feeds.loginRequired, 0));
+                                } else if (admin) {
+                                    // 管理员：所有非草稿的 + 自己的草稿
+                                    return or(
+                                        eq(feeds.draft, 0),
+                                        and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                                    );
+                                } else {
+                                    // 普通用户：公开的 + 自己的草稿
+                                    return or(
+                                        and(eq(feeds.draft, 0), eq(feeds.listed, 1)),
+                                        and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }));
-        
-        const result = tag_list.map((tag: any) => ({
-            ...tag,
-            feeds: tag.feeds.length
+
+        // 过滤掉用户看不到任何文章的标签
+        const visibleTags = tag_list.filter((tag: any) => {
+            return tag.feeds.some((f: any) => f.feed !== null);
+        });
+
+        // 统计用户能看到的文章数量
+        const result = visibleTags.map((tag: any) => ({
+            id: tag.id,
+            name: tag.name,
+            createdAt: tag.createdAt,
+            updatedAt: tag.updatedAt,
+            feeds: tag.feeds.filter((f: any) => f.feed !== null).length
         }));
-        
+
         return c.json(result);
     });
 
-    // GET /tag/:name
+    // GET /tag/:name - 标签详情
     app.get('/:name', async (c: AppContext) => {
         const db = c.get('db');
         const admin = c.get('admin');
+        const uid = c.get('uid');
         const nameDecoded = decodeURI(c.req.param('name'));
-        
+
         const tag = await profileAsync(c, 'tag_detail_db', () => db.query.hashtags.findFirst({
             where: eq(hashtags.name, nameDecoded),
             with: {
@@ -49,25 +87,43 @@ export function TagService(): Hono {
                                     with: { hashtag: { columns: { id: true, name: true } } }
                                 }
                             },
-                            where: (feeds: any) => admin ? undefined : and(eq(feeds.draft, 0), eq(feeds.listed, 1))
+                            // 根据用户权限过滤文章
+                            where: (feeds: any) => {
+                                if (!uid) {
+                                    // 未登录：只能看公开且非仅登录可见的
+                                    return and(eq(feeds.draft, 0), eq(feeds.listed, 1), eq(feeds.loginRequired, 0));
+                                } else if (admin) {
+                                    // 管理员：所有非草稿的 + 自己的草稿
+                                    return or(
+                                        eq(feeds.draft, 0),
+                                        and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                                    );
+                                } else {
+                                    // 普通用户：公开的 + 自己的草稿
+                                    return or(
+                                        and(eq(feeds.draft, 0), eq(feeds.listed, 1)),
+                                        and(eq(feeds.draft, 1), eq(feeds.uid, uid))
+                                    );
+                                }
+                            }
                         } as any
                     }
                 }
             }
         }));
-        
-        const tagFeeds = tag?.feeds.map((tagFeed: any) => {
+
+        if (!tag) {
+            return c.text('Not found', 404);
+        }
+
+        const tagFeeds = tag.feeds.map((tagFeed: any) => {
             if (!tagFeed.feed) return null;
             return {
                 ...tagFeed.feed,
                 hashtags: tagFeed.feed.hashtags.map((hashtag: any) => hashtag.hashtag)
             };
         }).filter((feed: any) => feed !== null);
-        
-        if (!tag) {
-            return c.text('Not found', 404);
-        }
-        
+
         return c.json({ ...tag, feeds: tagFeeds });
     });
 
@@ -76,7 +132,6 @@ export function TagService(): Hono {
 
 export async function bindTagToPost(db: DB, feedId: number, tags: string[]) {
     await db.delete(feedHashtags).where(eq(feedHashtags.feedId, feedId));
-    
     for (const tag of tags) {
         const tagId = await getTagIdOrCreate(db, tag);
         await db.insert(feedHashtags).values({
