@@ -29,7 +29,8 @@ export function FeedsPage() {
     const query = new URLSearchParams(useSearch());
     const profile = useContext(ProfileContext);
     const [listState, _setListState] = useState<FeedType>(query.get("type") as FeedType || 'normal')
-    const [status, setStatus] = useState<'loading' | 'idle'>('idle')
+    const [status, setStatus] = useState<'loading' | 'idle' | 'error'>('idle')
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [feeds, setFeeds] = useState<FeedsMap>({
         draft: { size: 0, data: [], hasNext: false },
         unlisted: { size: 0, data: [], hasNext: false },
@@ -40,17 +41,22 @@ export function FeedsPage() {
     const feedListClass = siteConfig.feedLayout === "masonry" ? "wauto columns-1 gap-5 ani-show md:columns-2" : "wauto flex flex-col ani-show";
     const ref = useRef("")
     function fetchFeeds(type: FeedType) {
+        setErrorMessage(null)
         client.feed.list({
             page: page,
             limit: limit,
             type: type
-        }).then(({ data }) => {
+        }).then(({ data, error }) => {
             if (data) {
                 setFeeds({
                     ...feeds,
                     [type]: data
                 })
                 setStatus('idle')
+            }
+            if (error) {
+                setErrorMessage(error.value as string)
+                setStatus('error')
             }
         })
     }
@@ -78,7 +84,7 @@ export function FeedsPage() {
             <Waiting for={feeds.draft.size + feeds.normal.size + feeds.unlisted.size > 0 || status === 'idle'}>
                 <main className="w-full flex flex-col justify-center items-center mb-8">
                     <div className="wauto text-start text-black dark:text-white py-4 text-4xl font-bold">
-                        <p>
+                        <p><
                             {listState === 'draft' ? t('draft_bin') : listState === 'normal' ? t('article.title') : t('unlisted')}
                         </p>
                         <div className="flex flex-row justify-between">
@@ -97,12 +103,23 @@ export function FeedsPage() {
                             }
                         </div>
                     </div>
-                    <Waiting for={status === 'idle'}>
-                        <div className={feedListClass}>
-                            {feeds[listState].data.map(({ id, ...feed }: any) => (
-                                <FeedCard key={id} id={id} {...feed} />
-                            ))}
-                        </div>
+                    <Waiting for={status === 'idle' || status === 'error'}>
+                        {status === 'error' ? (
+                            <div className="py-20 text-center">
+                                <p className="text-xl font-bold t-primary">
+                                    {errorMessage === 'Permission denied' ? '无权限查看' : errorMessage}
+                                </p>
+                                <p className="mt-2 text-sm text-neutral-500">
+                                    {errorMessage === 'Permission denied' ? '你没有权限查看此内容' : '加载失败，请稍后重试'}
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className={feedListClass}>
+                                    {feeds[listState].data.map(({ id, ...feed }: any) => (
+                                        <FeedCard key={id} id={id} {...feed} />
+                                    ))}
+                                </div>
                         <div className="wauto flex flex-row items-center mt-4 ani-show">
                             {page > 1 &&
                                 <Link href={`/?type=${listState}&page=${(page - 1)}`}
@@ -117,7 +134,9 @@ export function FeedsPage() {
                                     {t('next')}
                                 </Link>
                             }
-                        </div>
+                            </div>
+                            </>
+                        )}
                     </Waiting>
                 </main>
             </Waiting>
