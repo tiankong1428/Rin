@@ -38,6 +38,7 @@ export function MomentsPage() {
     const { t } = useTranslation()
     const siteConfig = useSiteConfig();
     const profile = useContext(ProfileContext);
+    const isAdmin = profile?.permission ?? false;
     const { showAlert, AlertUI } = useAlert()
     const { showConfirm, ConfirmUI } = useConfirm()
     
@@ -181,7 +182,7 @@ export function MomentsPage() {
                             <p className="text-sm mt-4 text-neutral-500 font-normal">
                                 {t('moments.total$count', { count: length })}
                             </p>
-                            {profile?.permission && (
+                            {profile && (
                                 <button 
                                     onClick={openCreateModal}
                                     className="text-sm font-normal rounded-full px-4 py-2 text-white bg-theme"
@@ -201,7 +202,8 @@ export function MomentsPage() {
                                         moment={moment} 
                                         onDelete={handleDelete}
                                         onEdit={handleEdit}
-                                        canManage={profile?.permission || false}
+                                        canEdit={isAdmin}
+                                        canDelete={isAdmin || moment.user.id === profile?.id}
                                     />
                                 ))}
                             </div>
