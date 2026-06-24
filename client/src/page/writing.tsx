@@ -137,6 +137,7 @@ export function WritingPage({ id }: { id?: number }) {
     const [loginRequired, setLoginRequired] = useState(false);  // 新增
   const [content, setContent] = cache.useCache("content", "");
   const [pageError, setPageError] = useState<string | null>(null);  // 新增：页面错误状态
+  const [feedData, setFeedData] = useState<any>(null);
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
   const { showAlert, AlertUI } = useAlert()
@@ -202,74 +203,78 @@ export function WritingPage({ id }: { id?: number }) {
       setPageError(null);
     }
   }, [profile]);
-      useEffect(() => {
+        useEffect(() => {
     if (id) {
-            client.feed
+      client.feed
         .get(id)
         .then(({ data, error }) => {
           if (error) {
-            setPageError(error.value as string);  // 改成设置错误状态，显示错误页面
+            setPageError(error.value as string);
             return;
           }
           if (data) {
-            // 权限检查：不是自己的文章且不是管理员，禁止编辑
-            if (data.uid !== profile?.id && !isAdmin) {
-              setPageError("无权限编辑此文章");  // 改成设置错误信息
-              return;
-            }
-            // 获取本地草稿的最后修改时间
-            const localModifiedAt = cache.getModifiedAt();
-            // 获取服务器的最后更新时间
-            const serverUpdatedAt = new Date(data.updatedAt).getTime();
-            
-            if (localModifiedAt === null) {
-              // 情况 1：本地没有草稿 → 直接用服务器的，不弹窗
-              if (data.title) setTitle(data.title);
-              if (data.content) setContent(data.content);
-              if (data.hashtags) {
-                setTags(data.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
-              }
-              if ((data as any).alias) setAlias((data as any).alias);
-              if ((data as any).summary) setSummary((data as any).summary || "");
-              
-              // 同步时间戳
-              cache.touchModifiedAt();
-            } 
-            else if (serverUpdatedAt > localModifiedAt) {
-              // 情况 2：服务器版本更新 → 弹窗问用户要不要用服务器的
-              const useServer = confirm(
-                "检测到服务器上有更新的版本。\n\n" +
-                "点击「确定」：加载服务器最新版本\n" +
-                "点击「取消」：继续编辑本地草稿"
-              );
-              
-              if (useServer) {
-                // 用户选确定，用服务器版本覆盖本地
-                if (data.title) setTitle(data.title);
-                if (data.content) setContent(data.content);
-                if (data.hashtags) {
-                  setTags(data.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
-                }
-                if ((data as any).alias) setAlias((data as any).alias);
-                if ((data as any).summary) setSummary((data as any).summary || "");
-                
-                // 把本地草稿时间戳同步成服务器的时间
-                cache.touchModifiedAt();
-              }
-              // 用户选取消，什么都不做，继续用本地草稿
-            }
-            
-            // 情况 3：本地草稿更新，或者时间一样 → 什么都不做，继续用本地的
-            
-            // 这几个字段每次都用服务器的（因为没缓存）
-            setListed((data as any).listed === 1);
-            setDraft((data as any).draft === 1);
-            setLoginRequired((data as any).loginRequired === 1);  // 新增
-            setCreatedAt(new Date(data.createdAt));
+            // 先存数据，权限检查等 profile 加载完再做
+            setFeedData(data);
           }
         });
     }
-  }, []);
+  }, [id]);
+  // 等 profile 和文章数据都准备好了，再检查权限并填充表单
+  useEffect(() => {
+    if (!feedData || !profile) return;
+
+    // 权限检查：不是自己的文章且不是管理员，禁止编辑
+    if (feedData.uid !== profile.id && !isAdmin) {
+      setPageError("无权限编辑此文章");
+      return;
+    }
+
+    // 获取本地草稿的最后修改时间
+    const localModifiedAt = cache.getModifiedAt();
+    // 获取服务器的最后更新时间
+    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+
+    if (localModifiedAt === null) {
+      // 情况 1：本地没有草稿 → 直接用服务器的，不弹窗
+      if (feedData.title) setTitle(feedData.title);
+      if (feedData.content) setContent(feedData.content);
+      if (feedData.hashtags) {
+        setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+      }
+      if ((feedData as any).alias) setAlias((feedData as any).alias);
+      if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+      // 同步时间戳
+      cache.touchModifiedAt();
+    } 
+    else if (serverUpdatedAt > localModifiedAt) {
+      // 情况 2：服务器版本更新 → 弹窗问用户要不要用服务器的
+      const useServer = confirm(
+        "检测到服务器上有更新的版本。\n\n" +
+        "点击「确定」：加载服务器最新版本\n" +
+        "点击「取消」：继续编辑本地草稿"
+      );
+      if (useServer) {
+        // 用户选确定，用服务器版本覆盖本地
+        if (feedData.title) setTitle(feedData.title);
+        if (feedData.content) setContent(feedData.content);
+        if (feedData.hashtags) {
+          setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+        }
+        if ((feedData as any).alias) setAlias((feedData as any).alias);
+        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+        // 把本地草稿时间戳同步成服务器的时间
+        cache.touchModifiedAt();
+      }
+      // 用户选取消，什么都不做，继续用本地草稿
+    }
+    // 情况 3：本地草稿更新，或者时间一样 → 什么都不做，继续用本地的
+
+    // 这几个字段每次都用服务器的（因为没缓存）
+    setListed((feedData as any).listed === 1);
+    setDraft((feedData as any).draft === 1);
+    setLoginRequired((feedData as any).loginRequired === 1);
+    setCreatedAt(new Date(feedData.createdAt));
+  }, [feedData, profile]);
   const debouncedUpdate = useCallback(
     _.debounce(() => {
       mermaid.initialize({
