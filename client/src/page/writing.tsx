@@ -206,7 +206,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章：移除profile等待，避免草稿延迟覆盖
+  // 拉取文章：移除profile等待，消除草稿时序冲突
   useEffect(() => {
     if (id) {
       client.feed
@@ -223,7 +223,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [id]);
 
-  // 填充表单，修复草稿被覆盖、服务器更新弹窗
+  // 填充表单，移除未使用变量、恢复服务器更新弹窗、本地草稿不被覆盖
   useEffect(() => {
     if (!feedData) return;
     if (profile === undefined) return;
@@ -235,11 +235,9 @@ export function WritingPage({ id }: { id?: number }) {
     }
 
     const localModifiedAt = cache.getModifiedAt();
-    const localTitle = cache.getRaw("title");
-    const localContent = cache.getRaw("content");
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-    // 本地有草稿且服务器更新，弹出选择，不自动覆盖草稿
+    // 本地有草稿 + 后端版本更新，弹出确认框
     if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
@@ -250,7 +248,7 @@ export function WritingPage({ id }: { id?: number }) {
         if (feedData.title) setTitle(feedData.title);
         if (feedData.content) setContent(feedData.content);
         if (feedData.hashtags) {
-          setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+          setTags(feedData.hashtags.map((item) => `#${item.name}`).join(" "));
         }
         if ((feedData as any).alias) setAlias((feedData as any).alias);
         if ((feedData as any).summary) setSummary((feedData as any).summary || "");
@@ -259,12 +257,12 @@ export function WritingPage({ id }: { id?: number }) {
       return;
     }
 
-    // 完全无本地草稿才加载服务器内容
+    // 完全无本地草稿才加载后端内容
     if (localModifiedAt === null) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
-        setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+        setTags(feedData.hashtags.map((item) => `#${item.name}`).join(" "));
       }
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
@@ -321,7 +319,7 @@ export function WritingPage({ id }: { id?: number }) {
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
-        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/5 items-start justify-between">
+        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/10 items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
             <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
@@ -336,7 +334,7 @@ export function WritingPage({ id }: { id?: number }) {
             <Input
               id={id}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              setValue={setTitle}
               placeholder={t("title")}
               variant="flat"
               className="text-base"
@@ -345,44 +343,70 @@ export function WritingPage({ id }: { id?: number }) {
           <Input
             id={id}
             value={summary}
-            onChange={(e) => setSummary(e.target.value)}
+            setValue={setSummary}
             placeholder={t("summary")}
             variant="flat"
           />
           <Input
             id={id}
             value={alias}
-            onChange={(e) => setAlias(e.target.value)}
+            setValue={setAlias}
             placeholder={t("alias")}
             variant="flat"
           />
           <Input
             id={id}
             value={tags}
-            onChange={(e) => setTags(e.target.value)}
+            setValue={setTags}
             placeholder={t("tags")}
             variant="flat"
             className="lg:col-span-2"
           />
         </div>
 
-        <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_1fr_2fr]">
-          <FlatMetaRow onClick={() => setDraft(!draft)} className="cursor-pointer">
+        <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
+          <FlatMetaRow
+            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            onClick={() => setDraft(!draft)}
+          >
             <p>{t('visible.self_only')}</p>
-            <Checkbox value={draft} onChange={setDraft} />
+            <Checkbox
+              id={id}
+              value={draft}
+              setValue={setDraft}
+              placeholder={t('draft')}
+            />
           </FlatMetaRow>
-          <FlatMetaRow onClick={() => setListed(!listed)} className="cursor-pointer">
+          <FlatMetaRow
+            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            onClick={() => setListed(!listed)}
+          >
             <p>{t('listed')}</p>
-            <Checkbox value={listed} onChange={setListed} />
+            <Checkbox
+              id={id}
+              value={listed}
+              setValue={setListed}
+              placeholder={t('listed')}
+            />
           </FlatMetaRow>
-          <FlatMetaRow onClick={() => setLoginRequired(!loginRequired)} className="cursor-pointer">
+          <FlatMetaRow
+            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            onClick={() => setLoginRequired(!loginRequired)}
+          >
             <p>仅登录可见</p>
-            <Checkbox value={loginRequired} onChange={setLoginRequired} />
+            <Checkbox
+              id={id}
+              value={loginRequired}
+              setValue={setLoginRequired}
+              placeholder="仅登录可见"
+            />
           </FlatMetaRow>
           {isAdmin && (
-            <FlatMetaRow className="xl:col-span-1">
-              <span className="mr-2 whitespace-nowrap">{t('created_at')}</span>
-              <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[240px]" />
+            <FlatMetaRow className="gap-3 rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10 xl:col-span-1">
+              <p className="mr-2 whitespace-nowrap">
+                {t('created_at')}
+              </p>
+              <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
             </FlatMetaRow>
           )}
         </div>
@@ -390,6 +414,7 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
+  // 错误页面分支
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -416,27 +441,27 @@ export function WritingPage({ id }: { id?: number }) {
         <Helmet>
           <title>{`${title} - ${siteName}`}</title>
           <meta property="og:site_name" content={siteName} />
-          <meta property="og:title" content={title} />
+          <meta property="og:title" content={t('writing')} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
           <meta property="og:url" content={location.href} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
-          <div className="rounded-2xl bg-white dark:bg-neutral-800 p-8 text-center">
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{title}</h1>
+          <div className="rounded-2xl bg-w p-8 text-center">
+            <h1 className="text-2xl font-bold t-primary">{title}</h1>
             {desc && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{desc}</p>}
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
                 <button
-                  onClick={() => window.location.href = "/login"}
-                  className="rounded-xl bg-theme px-6 py-2 text-sm text-white hover:bg-theme-hover"
+                  onClick={() => (window.location.href = "/")}
+                  className="rounded-xl bg-theme px-6 py-2 text-sm text-white transition-colors hover:bg-theme-hover"
                 >
                   去登录
                 </button>
               )}
               <button
-                onClick={() => window.location.href = "/"}
-                className="rounded-xl bg-neutral-200 dark:bg-neutral-700 px-6 py-2 text-sm text-neutral-800 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                onClick={() => (window.location.href = "/")}
+                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
               >
                 返回首页
               </button>
@@ -448,10 +473,11 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
+  // 无文章数据显示Loading，有数据渲染编辑器
   return (
     <>
       <Helmet>
-        <title>{`${t('writing')} - ${siteName}`}</title>
+        <title>{`${t('writing')} - ${siteConfig.name}`}</title>
         <meta property="og:site_name" content={siteName} />
         <meta property="og:title" content={t('writing')} />
         <meta property="og:image" content={siteConfig.avatar} />
