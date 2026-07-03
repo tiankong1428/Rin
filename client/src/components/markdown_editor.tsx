@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from "react-loading";
 import { FlatInset, FlatTabButton } from "@rin/ui";
@@ -32,121 +32,132 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
-  // 初始化 Vditor（仅挂载时执行一次）
-  useEffect(() => {
-    if (!editorContainerRef.current) return;
+  // 用 ref 保存 Vditor 清理函数，避免污染 DOM
+  const cleanupRef = useRef<(() => void) | null>(null);
 
-    const vditor = new Vditor(editorContainerRef.current, {
-      height: parseInt(height),
-      mode: "ir",
-      placeholder,
-      theme: colorMode === "dark" ? "dark" : "classic",
-      toolbar: [
-        "headings",
-        "bold",
-        "italic",
-        "strike",
-        "link",
-        "|",
-        "list",
-        "ordered-list",
-        "check",
-        "outdent",
-        "indent",
-        "|",
-        "quote",
-        "line",
-        "code",
-        "inline-code",
-        "insert-before",
-        "insert-after",
-        "|",
-        "upload",
-        "table",
-        "|",
-        "undo",
-        "redo",
-        "|",
-        "fullscreen",
-        "edit-mode",
-        "both",
-        "preview",
-        "outline",
-        "code-theme",
-        "export",
-      ],
-      outline: { enable: false, position: "left" },
-      counter: { enable: false },
-      cache: { enable: false },
-      upload: {
-        // 不限制文件大小
-        handler: async (files: File[]) => {
-          setUploading(true);
-          try {
-            for (const file of files) {
+  // 初始化 Vditor（使用 useLayoutEffect + setTimeout 确保容器已渲染）
+  useLayoutEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const vditor = new Vditor(container, {
+          height: parseInt(height),
+          mode: "ir",
+          placeholder,
+          theme: colorMode === "dark" ? "dark" : "classic",
+          toolbar: [
+            "headings",
+            "bold",
+            "italic",
+            "strike",
+            "link",
+            "|",
+            "list",
+            "ordered-list",
+            "check",
+            "outdent",
+            "indent",
+            "|",
+            "quote",
+            "line",
+            "code",
+            "inline-code",
+            "insert-before",
+            "insert-after",
+            "|",
+            "upload",
+            "table",
+            "|",
+            "undo",
+            "redo",
+            "|",
+            "fullscreen",
+            "edit-mode",
+            "both",
+            "preview",
+            "outline",
+            "code-theme",
+            "export",
+          ],
+          outline: { enable: false, position: "left" },
+          counter: { enable: false },
+          cache: { enable: false },
+          upload: {
+            handler: async (files: File[]) => {
+              setUploading(true);
               try {
-                const result = await uploadImageFile(file);
-                const imgMarkdown = buildMarkdownImage(file.name, result.url, {
-                  blurhash: result.blurhash,
-                  width: result.width,
-                  height: result.height,
-                });
-                vditorRef.current?.insertValue(imgMarkdown);
-              } catch (err) {
-                console.error(err);
-                showAlert(err instanceof Error ? err.message : t("upload.failed"));
+                for (const file of files) {
+                  try {
+                    const result = await uploadImageFile(file);
+                    const imgMarkdown = buildMarkdownImage(file.name, result.url, {
+                      blurhash: result.blurhash,
+                      width: result.width,
+                      height: result.height,
+                    });
+                    vditorRef.current?.insertValue(imgMarkdown);
+                  } catch (err) {
+                    console.error(err);
+                    showAlert(err instanceof Error ? err.message : t("upload.failed"));
+                  }
+                }
+              } finally {
+                setUploading(false);
               }
+              return "";
+            },
+          },
+          input: (value) => {
+            if (!isComposingRef.current) {
+              setContent(value);
             }
-          } finally {
-            setUploading(false);
-          }
-          // 返回空字符串，阻止 Vditor 默认插入行为
-          return "";
-        },
-      },
-      input: (value) => {
-        if (!isComposingRef.current) {
-          setContent(value);
-        }
-      },
-      after: () => {
-        if (content) {
-          vditor.setValue(content);
-        }
-      },
-      lang: "zh_CN",
-    });
+          },
+          after: () => {
+            if (content) {
+              vditor.setValue(content);
+            }
+          },
+          lang: "zh_CN",
+        });
 
-    vditorRef.current = vditor;
+        vditorRef.current = vditor;
 
-    // 处理中文输入法组合输入事件
-    const editorEl = editorContainerRef.current.querySelector(".vditor-ir");
-    if (editorEl) {
-      const onCompositionStart = () => {
-        isComposingRef.current = true;
-      };
-      const onCompositionEnd = () => {
-        isComposingRef.current = false;
-        if (vditorRef.current) {
-          setContent(vditorRef.current.getValue());
+        // 中文输入法处理
+        const editorEl = container.querySelector(".vditor-ir");
+        if (editorEl) {
+          const onCompositionStart = () => {
+            isComposingRef.current = true;
+          };
+          const onCompositionEnd = () => {
+            isComposingRef.current = false;
+            if (vditorRef.current) {
+              setContent(vditorRef.current.getValue());
+            }
+          };
+          editorEl.addEventListener("compositionstart", onCompositionStart);
+          editorEl.addEventListener("compositionend", onCompositionEnd);
+
+          // 保存清理函数
+          cleanupRef.current = () => {
+            editorEl.removeEventListener("compositionstart", onCompositionStart);
+            editorEl.removeEventListener("compositionend", onCompositionEnd);
+            vditor.destroy();
+            vditorRef.current = null;
+          };
         }
-      };
-      editorEl.addEventListener("compositionstart", onCompositionStart);
-      editorEl.addEventListener("compositionend", onCompositionEnd);
-
-      return () => {
-        editorEl.removeEventListener("compositionstart", onCompositionStart);
-        editorEl.removeEventListener("compositionend", onCompositionEnd);
-        vditor.destroy();
-        vditorRef.current = null;
-      };
-    }
+      } catch (err) {
+        console.error("Vditor initialization failed:", err);
+      }
+    }, 0);
 
     return () => {
-      vditor.destroy();
-      vditorRef.current = null;
+      clearTimeout(timer);
+      // 如果已经初始化，执行清理
+      cleanupRef.current?.();
+      cleanupRef.current = null;
     };
-  }, []); // 仅在挂载时初始化
+  }, []); // 仅挂载一次
 
   // 外部 content 变化时同步到编辑器
   useEffect(() => {
