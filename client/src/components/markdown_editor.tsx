@@ -29,7 +29,7 @@ function getFileMarkdown(file: File, url: string, extra?: any): string {
   } else if (type.startsWith("video/")) {
     return `<video src="${url}" controls style="max-width:100%"></video>`;
   } else if (type.startsWith("audio/")) {
-    return `<audio src="${url}" controls></audio>`;
+    return `<audio src="${url}" controls>`;
   } else {
     return `[${name}](${url})`;
   }
@@ -38,7 +38,7 @@ function getFileMarkdown(file: File, url: string, extra?: any): string {
 export function MarkdownEditor({
   content,
   setContent,
-  placeholder = "> Write your content here...",
+  placeholder = "> 在这里输入内容...",
   height = "400px",
   onRestoreServer,
 }: MarkdownEditorProps) {
@@ -70,6 +70,8 @@ export function MarkdownEditor({
     const timer = setTimeout(() => {
       try {
         const vditor = new Vditor(container, {
+          // 新增：禁止加载unpkg远程资源，彻底解决拦截报错
+          cdn: "",
           height: parseInt(height),
           mode: "ir",
           placeholder,
