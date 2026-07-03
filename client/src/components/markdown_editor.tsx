@@ -238,9 +238,7 @@ export function MarkdownEditor({
                 },
                 dragAndDrop: true,
                 // 修复1：关闭编辑器自定义右键菜单，手机长按唤起系统复制粘贴
-                contextmenu: {
-                  enabled: false
-                },
+                contextmenu: false,
                 // 修复2：放行系统原生 Ctrl/Cmd + C/V 剪贴快捷键，解决浏览器复制失效
                 keyboard: {
                   bindings: [
