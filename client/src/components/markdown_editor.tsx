@@ -128,31 +128,30 @@ export function MarkdownEditor({
   }
 
   const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
-    editorRef.current = editor;
+  editorRef.current = editor;
 
-    // 禁用编辑器自身自定义右键，不屏蔽浏览器原生长按菜单
-    editor.onContextMenu(e => e.preventDefault());
+  // 阻止编辑器内置右键，改用 stop() 兼容旧版类型
+  editor.onContextMenu(e => e.stop());
 
-    editor.onDidCompositionStart(() => {
-      isComposingRef.current = true;
-    });
+  editor.onDidCompositionStart(() => {
+    isComposingRef.current = true;
+  });
 
-    editor.onDidCompositionEnd(() => {
-      isComposingRef.current = false;
+  editor.onDidCompositionEnd(() => {
+    isComposingRef.current = false;
+    setContent(editor.getValue());
+  });
+
+  editor.onDidChangeModelContent(() => {
+    if (!isComposingRef.current) {
       setContent(editor.getValue());
-    });
+    }
+  });
 
-    editor.onDidChangeModelContent(() => {
-      if (!isComposingRef.current) {
-        setContent(editor.getValue());
-      }
-    });
-
-    editor.onDidBlurEditorText(() => {
-      setContent(editor.getValue());
-    });
-  };
-
+  editor.onDidBlurEditorText(() => {
+    setContent(editor.getValue());
+  });
+};
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
