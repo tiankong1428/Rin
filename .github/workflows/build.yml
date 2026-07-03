@@ -56,6 +56,7 @@ jobs:
       - name: Build client
         run: |
           cd client
+          bun install
           echo "=== list node_modules/vditor ==="
           ls -la node_modules/vditor
           echo "=== list node_modules/vditor/dist ==="
