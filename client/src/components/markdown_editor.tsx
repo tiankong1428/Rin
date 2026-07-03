@@ -69,8 +69,6 @@ export function MarkdownEditor({
       value: content,
       input: (val) => setContent(val),
       upload: {
-        accept: "image/*",
-        multiple: true,
         handler: uploadFile
       },
       toolbar: [
