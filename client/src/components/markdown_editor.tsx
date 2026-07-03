@@ -184,7 +184,7 @@ export function MarkdownEditor({
       </FlatInset>
       <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
-          {/* 关键样式：放开安卓/iOS原生文本选择，取消块状选区限制，弹出系统菜单 */}
+          {/* 核心移动端文本选择样式保留，解决整块选中、唤起系统菜单 */}
           <div
             className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
             style={{
@@ -228,11 +228,7 @@ export function MarkdownEditor({
                 renderControlCharacters: false,
                 smoothScrolling: false,
                 minimap: { enabled: false },
-                dragAndDrop: true,
-                touch: {
-                  enable: true,
-                  pointerEvents: true
-                }
+                dragAndDrop: true
               }}
             />
           </div>
