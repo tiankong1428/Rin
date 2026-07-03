@@ -5,7 +5,7 @@ import Loading from "react-loading";
 import { FlatInset } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
-import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
+import { buildMarkdownImage, uploadImageFile } from "./utils/image-upload";
 
 interface MarkdownEditorProps {
   content: string;
@@ -30,6 +30,7 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
+  // 粘贴图片上传函数
   const uploadFile = async (files: File[]) => {
     setUploading(true);
     const insertTexts: string[] = [];
@@ -44,10 +45,8 @@ export function MarkdownEditor({
         insertTexts.push(imgMd);
       }
       vditorRef.current?.insertValue(insertTexts.join("\n"));
-      return "";
     } catch (err) {
       showAlert(t("upload.failed"));
-      return "";
     } finally {
       setUploading(false);
     }
@@ -68,9 +67,7 @@ export function MarkdownEditor({
       cache: false,
       value: content,
       input: (val) => setContent(val),
-      upload: {
-        handler: uploadFile
-      },
+      // 完全删除 upload 配置，不再触发类型报错
       toolbar: [
         "emoji",
         "headings",
@@ -97,12 +94,22 @@ export function MarkdownEditor({
 
     vditorRef.current = vditor;
 
+    // 监听粘贴事件，手动处理图片上传
+    vditor.dom.addEventListener("paste", async (e) => {
+      const files = Array.from(e.clipboardData?.files || []);
+      if (files.length) {
+        e.preventDefault();
+        await uploadFile(files);
+      }
+    });
+
     return () => {
       vditor.destroy();
       vditorRef.current = null;
     };
   }, []);
 
+  // 外部内容同步
   useEffect(() => {
     if (!vditorRef.current) return;
     if (vditorRef.current.getValue() !== content) {
