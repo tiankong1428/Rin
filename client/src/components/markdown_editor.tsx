@@ -1,15 +1,14 @@
-import Editor from '@monaco-editor/react';
-import { editor } from 'monaco-editor';
 import React, { useRef, useState, useEffect } from "react";
+import Vditor from "vditor";
 import { useTranslation } from "react-i18next";
-import Loading from 'react-loading';
+import Loading from "react-loading";
 import { FlatInset, FlatTabButton } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 import { Markdown } from "./markdown";
 
-interface MarkdownEditorProps {
+interface VditorEditorProps {
   content: string;
   setContent: (content: string) => void;
   placeholder?: string;
@@ -17,235 +16,131 @@ interface MarkdownEditorProps {
   onRestoreServer?: () => void;
 }
 
-export function MarkdownEditor({
+export function VditorEditor({
   content,
   setContent,
   placeholder = "> Write your content here...",
   height = "400px",
   onRestoreServer,
-}: MarkdownEditorProps) {
+}: VditorEditorProps) {
   const { t } = useTranslation();
   const colorMode = useColorMode();
-  const editorRef = useRef<editor.IStandaloneCodeEditor>();
-  const isComposingRef = useRef(false);
-  const [preview, setPreview] = useState<'edit' | 'preview' | 'comparison'>('edit');
+  const isDark = colorMode === "dark";
+  const vditorDomRef = useRef<HTMLDivElement>(null);
+  const vditorRef = useRef<Vditor | null>(null);
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
-  async function insertImage(
-    file: File,
-    range: NonNullable<ReturnType<editor.IStandaloneCodeEditor["getSelection"]>>,
-    showAlert: (msg: string) => void,
-  ) {
-    try {
-      const result = await uploadImageFile(file);
-      const editorInstance = editorRef.current;
-      if (!editorInstance) return;
-      editorInstance.executeEdits(undefined, [{
-        range,
-        text: buildMarkdownImage(file.name, result.url, {
-          blurhash: result.blurhash,
-          width: result.width,
-          height: result.height,
-        }),
-      }]);
-    } catch (error) {
-      console.error(error);
-      showAlert(error instanceof Error ? error.message : t("upload.failed"));
-    }
-  }
-
-  const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
-    const clipboardData = event.clipboardData;
-    const files = Array.from(clipboardData.files);
-    if (files.length === 0) return;
-    event.preventDefault();
-
-    const editor = editorRef.current;
-    if (!editor) return;
-    const selection = editor.getSelection();
-    if (!selection) return;
-
+  const uploadFile = async (files: File[]) => {
     setUploading(true);
-    const uploadAll = async () => {
+    const insertTexts: string[] = [];
+    try {
       for (const file of files) {
-        await insertImage(file, selection, showAlert);
+        const res = await uploadImageFile(file, {} as any, showAlert);
+        const imgMd = buildMarkdownImage(file.name, res.url, {
+          blurhash: res.blurhash,
+          width: res.width,
+          height: res.height,
+        });
+        insertTexts.push(imgMd);
       }
-    };
-    void uploadAll().finally(() => setUploading(false));
-  };
-
-  function UploadImageButton() {
-    const uploadRef = useRef<HTMLInputElement>(null);
-
-    const upChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = event.currentTarget.files;
-      if (!files || files.length === 0) return;
-      const editor = editorRef.current;
-      if (!editor) return;
-      const selection = editor.getSelection();
-      if (!selection) return;
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.size > 5 * 1024 * 1000) {
-          showAlert(t("upload.failed$size", { size: 5 }));
-          uploadRef.current!.value = "";
-          return;
-        }
-      }
-
-      setUploading(true);
-      const uploadAll = async () => {
-        for (let i = 0; i < files.length; i++) {
-          await insertImage(files[i], selection, showAlert);
-        }
-      };
-      void uploadAll().finally(() => {
-        setUploading(false);
-        uploadRef.current!.value = "";
-      });
-    };
-
-    return (
-      <button
-        type="button"
-        onClick={() => uploadRef.current?.click()}
-        className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
-      >
-        <input
-          ref={uploadRef}
-          onChange={upChange}
-          className="hidden"
-          type="file"
-          multiple
-          accept="image/gif,image/jpeg,image/jpg,image/png"
-        />
-        <i className="ri-image-add-line" />
-        <span>Image</span>
-      </button>
-    );
-  }
-
-  const handleEditorMount = (editorIns: editor.IStandaloneCodeEditor) => {
-    editorRef.current = editorIns;
-
-    editorIns.onDidCompositionStart(() => {
-      isComposingRef.current = true;
-    });
-    editorIns.onDidCompositionEnd(() => {
-      isComposingRef.current = false;
-      setContent(editorIns.getValue());
-    });
-    editorIns.onDidChangeModelContent(() => {
-      if (!isComposingRef.current) setContent(editorIns.getValue());
-    });
-    editorIns.onDidBlurEditorText(() => setContent(editorIns.getValue()));
+      vditorRef.current?.insertValue(insertTexts.join("\n"));
+    } catch (err) {
+      showAlert(t("upload.failed"));
+    } finally {
+      setUploading(false);
+    }
   };
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const model = editor.getModel();
-    if (!model) return;
-    const editorValue = model.getValue();
-    if (editorValue !== content) editor.setValue(content);
+    if (!vditorDomRef.current || vditorRef.current) return;
+
+    const vditor = new Vditor(vditorDomRef.current!, {
+      height,
+      placeholder,
+      mode: "sv",
+      theme: isDark ? "dark" : "light",
+      preview: {
+        theme: { current: isDark ? "dark" : "light" },
+      },
+      cache: false,
+      value: content,
+      input: (val) => setContent(val),
+      upload: {
+        accept: "image/*",
+        multiple: true,
+        handler: async (files) => {
+          await uploadFile(files);
+          return false;
+        },
+      },
+      toolbar: [
+        "emoji",
+        "headings",
+        "bold",
+        "italic",
+        "strike",
+        "link",
+        "|",
+        "list",
+        "ordered-list",
+        "check",
+        "table",
+        "code",
+        "code-block",
+        "|",
+        "undo",
+        "redo",
+        "fullscreen",
+      ],
+      toolbarConfig: {
+        pin: true,
+      },
+    });
+
+    vditorRef.current = vditor;
+
+    return () => {
+      vditor.destroy();
+      vditorRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!vditorRef.current) return;
+    if (vditorRef.current.getValue() !== content) {
+      vditorRef.current.setValue(content);
+    }
   }, [content]);
 
-  // 放行系统剪贴快捷键
-  const onKeyDownCapture = (e: React.KeyboardEvent) => {
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (!ctrl) return;
-    if (e.key === 'c' || e.key === 'x' || e.key === 'v') return;
+  const handleRestore = () => {
+    if (!vditorRef.current || !onRestoreServer) return;
+    onRestoreServer();
   };
-
-  // 外层放行原生系统右键/长按菜单
-  const openNativeMenu = () => {};
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
       <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
-        <FlatTabButton active={preview === 'edit'} onClick={() => setPreview('edit')}> {t("edit")} </FlatTabButton>
-        <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
-        <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
+        <FlatTabButton active onClick={() => vditorRef.current?.setMode("sv")}>
+          {t("comparison")}
+        </FlatTabButton>
         <div className="flex-grow" />
         {onRestoreServer && (
           <button
-            onClick={onRestoreServer}
+            onClick={handleRestore}
             className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-theme px-2 py-1 text-sm text-white transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
           >
             <span>复原</span>
           </button>
         )}
-        <UploadImageButton />
-        {uploading &&
+        {uploading && (
           <div className="flex flex-row items-center space-x-2">
             <Loading type="spin" color="#FC466B" height={16} width={16} />
-            <span className="text-sm text-neutral-500">{t('uploading')}</span>
+            <span className="text-sm text-neutral-500">{t("uploading")}</span>
           </div>
-        }
+        )}
       </FlatInset>
-      <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
-        <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
-          {/* 开启手机原生文本选择、长按菜单 */}
-          <div
-            className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
-            style={{
-              WebkitUserSelect: "text",
-              userSelect: "text",
-              WebkitTouchCallout: "default",
-            }}
-            onContextMenu={openNativeMenu}
-            onKeyDownCapture={onKeyDownCapture}
-            onDrop={(e) => {
-              e.preventDefault();
-              const editor = editorRef.current;
-              if (!editor) return;
-              const files = Array.from(e.dataTransfer.files);
-              if (!files.length) return;
-              const selection = editor.getSelection();
-              if (!selection) return;
-              setUploading(true);
-              const uploadAll = async () => {
-                for (const file of files) await insertImage(file, selection, showAlert);
-              };
-              void uploadAll().finally(() => setUploading(false));
-            }}
-            onPaste={handlePaste}
-          >
-            <Editor
-              onMount={handleEditorMount}
-              height={height}
-              defaultLanguage="markdown"
-              defaultValue={content}
-              theme={colorMode === "dark" ? "vs-dark" : "light"}
-              options={{
-                wordWrap: "on",
-                fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
-                fontLigatures: false,
-                letterSpacing: 0,
-                fontSize: 14,
-                lineNumbers: "off",
-                accessibilitySupport: "off",
-                unicodeHighlight: { ambiguousCharacters: false },
-                renderWhitespace: "none",
-                renderControlCharacters: false,
-                smoothScrolling: false,
-                minimap: { enabled: false },
-                dragAndDrop: true,
-                // 核心：彻底关闭编辑器内置VSCode菜单
-                contextmenu: false
-              }}
-            />
-          </div>
-        </div>
-        <div
-          className={"min-h-0 overflow-y-auto rounded-none border-0 bg-w px-4 py-4 border-t sm:border-none " + (preview === 'edit' ? "hidden" : "")}
-          style={{ height: height }}
-        >
-          <Markdown content={content ? content : placeholder} />
-        </div>
-      </div>
+      <div ref={vditorDomRef} />
       <AlertUI />
     </div>
   );
