@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { visualizer } from "rollup-plugin-visualizer";
+import copy from "rollup-plugin-copy";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -10,18 +11,25 @@ export default defineConfig(({ mode }) => {
   const cacheDir = process.env.RIN_VITE_CACHE_DIR || "../.vite/client";
   
   return {
+    base: "./", // 新增：资源使用相对路径，Cloudflare 不会404
     cacheDir,
-    // Note: Client configuration is fetched from server at runtime
-    // No environment variables are injected at build time
     build: {
       outDir: '../dist/client',
       emptyOutDir: true,
     },
-base: "./",
     plugins: [
       react(),
-      // Only open visualizer in build mode
-      visualizer({ open: !isDev })
+      visualizer({ open: !isDev }),
+      // 新增：复制vditor完整静态资源到打包产物
+      copy({
+        hook: "writeBundle",
+        targets: [
+          {
+            src: "node_modules/vditor/dist/**/*",
+            dest: "../dist/client/assets/vditor"
+          }
+        ]
+      })
     ],
     server: {
       proxy: {
@@ -51,7 +59,6 @@ base: "./",
         },
       },
     },
-    // Vitest configuration
     test: {
       globals: true,
       environment: 'jsdom',
