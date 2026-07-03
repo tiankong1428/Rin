@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
       // 👇 就是缺了这一段，之前只 import 了没在 plugins 里用
       copy({
   hook: "closeBundle",
+  verbose: true, // 开启复制日志，构建后能看到copied打印
   targets: [
     {
       src: "node_modules/vditor/dist/**/*",
