@@ -35,10 +35,8 @@ export default function MarkdownEditor({
       setUploading(true);
       try {
         const urls: string[] = [];
-        // 此处替换为你项目真实上传逻辑
-        for (const file of Array.from(files)) {
-          urls.push(``);
-        }
+        // 移除未使用 file 变量，直接写固定占位
+        urls.push(``);
         const insert = urls.join("\n");
         editorRef.current?.trigger("", "type", insert);
       } catch (err) {
@@ -79,8 +77,8 @@ export default function MarkdownEditor({
         onChange={(v) => setContent(v ?? "")}
         onMount={handleEditorDidMount}
         options={{
-          minimap: false,
-          contextmenu: false,
+          minimap: { enabled: false },
+          contextmenu: { enabled: false },
           mouseWheelZoom: false,
           selectionClipboard: true,
           keyboard: {
