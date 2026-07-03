@@ -248,7 +248,7 @@ export function WritingPage({ id }: { id?: number }) {
         if (feedData.title) setTitle(feedData.title);
         if (feedData.content) setContent(feedData.content);
         if (feedData.hashtags) {
-          setTags(feedData.hashtags.map((item) => `#${item.name}`).join(" "));
+          setTags(feedData.hashtags.map((item: {name:string}) => `#${item.name}`).join(" "));
         }
         if ((feedData as any).alias) setAlias((feedData as any).alias);
         if ((feedData as any).summary) setSummary((feedData as any).summary || "");
@@ -262,7 +262,7 @@ export function WritingPage({ id }: { id?: number }) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
-        setTags(feedData.hashtags.map((item) => `#${item.name}`).join(" "));
+        setTags(feedData.hashtags.map((item: {name:string}) => `#${item.name}`).join(" "));
       }
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
@@ -332,7 +332,7 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
             <Input
-              id={id}
+              id={String(id)}
               value={title}
               setValue={setTitle}
               placeholder={t("title")}
@@ -341,21 +341,21 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </div>
           <Input
-            id={id}
+            id={String(id)}
             value={summary}
             setValue={setSummary}
             placeholder={t("summary")}
             variant="flat"
           />
           <Input
-            id={id}
+            id={String(id)}
             value={alias}
             setValue={setAlias}
             placeholder={t("alias")}
             variant="flat"
           />
           <Input
-            id={id}
+            id={String(id)}
             value={tags}
             setValue={setTags}
             placeholder={t("tags")}
@@ -371,7 +371,7 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>{t('visible.self_only')}</p>
             <Checkbox
-              id={id}
+              id={String(id)}
               value={draft}
               setValue={setDraft}
               placeholder={t('draft')}
@@ -383,7 +383,7 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>{t('listed')}</p>
             <Checkbox
-              id={id}
+              id={String(id)}
               value={listed}
               setValue={setListed}
               placeholder={t('listed')}
@@ -395,7 +395,7 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>仅登录可见</p>
             <Checkbox
-              id={id}
+              id={String(id)}
               value={loginRequired}
               setValue={setLoginRequired}
               placeholder="仅登录可见"
@@ -453,7 +453,7 @@ export function WritingPage({ id }: { id?: number }) {
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
                 <button
-                  onClick={() => (window.location.href = "/")}
+                  onClick={() => (window.location.href = "/login")}
                   className="rounded-xl bg-theme px-6 py-2 text-sm text-white transition-colors hover:bg-theme-hover"
                 >
                   去登录
@@ -473,7 +473,7 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // 无文章数据显示Loading，有数据渲染编辑器
+  // 无文章数据显示Loading，有数据直接渲染表单
   return (
     <>
       <Helmet>
