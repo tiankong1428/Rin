@@ -32,10 +32,10 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
-  // 用 ref 保存 Vditor 清理函数，避免污染 DOM
   const cleanupRef = useRef<(() => void) | null>(null);
+  const vditorReadyRef = useRef(false); // 标志编辑器就绪
 
-  // 初始化 Vditor（使用 useLayoutEffect + setTimeout 确保容器已渲染）
+  // 初始化 Vditor
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -48,38 +48,12 @@ export function MarkdownEditor({
           placeholder,
           theme: colorMode === "dark" ? "dark" : "classic",
           toolbar: [
-            "headings",
-            "bold",
-            "italic",
-            "strike",
-            "link",
-            "|",
-            "list",
-            "ordered-list",
-            "check",
-            "outdent",
-            "indent",
-            "|",
-            "quote",
-            "line",
-            "code",
-            "inline-code",
-            "insert-before",
-            "insert-after",
-            "|",
-            "upload",
-            "table",
-            "|",
-            "undo",
-            "redo",
-            "|",
-            "fullscreen",
-            "edit-mode",
-            "both",
-            "preview",
-            "outline",
-            "code-theme",
-            "export",
+            "headings", "bold", "italic", "strike", "link", "|",
+            "list", "ordered-list", "check", "outdent", "indent", "|",
+            "quote", "line", "code", "inline-code", "insert-before", "insert-after", "|",
+            "upload", "table", "|",
+            "undo", "redo", "|",
+            "fullscreen", "edit-mode", "both", "preview", "outline", "code-theme", "export",
           ],
           outline: { enable: false, position: "left" },
           counter: { enable: false },
@@ -114,8 +88,14 @@ export function MarkdownEditor({
             }
           },
           after: () => {
-            if (content) {
-              vditor.setValue(content);
+            // 标记编辑器已就绪
+            vditorReadyRef.current = true;
+            if (content && vditor) {
+              try {
+                vditor.setValue(content);
+              } catch (e) {
+                console.warn("Vditor setValue failed:", e);
+              }
             }
           },
           lang: "zh_CN",
@@ -138,12 +118,19 @@ export function MarkdownEditor({
           editorEl.addEventListener("compositionstart", onCompositionStart);
           editorEl.addEventListener("compositionend", onCompositionEnd);
 
-          // 保存清理函数
           cleanupRef.current = () => {
             editorEl.removeEventListener("compositionstart", onCompositionStart);
             editorEl.removeEventListener("compositionend", onCompositionEnd);
             vditor.destroy();
             vditorRef.current = null;
+            vditorReadyRef.current = false;
+          };
+        } else {
+          // 若没有找到编辑区，也提供基本清理
+          cleanupRef.current = () => {
+            vditor.destroy();
+            vditorRef.current = null;
+            vditorReadyRef.current = false;
           };
         }
       } catch (err) {
@@ -153,14 +140,15 @@ export function MarkdownEditor({
 
     return () => {
       clearTimeout(timer);
-      // 如果已经初始化，执行清理
+      // 组件卸载时清理
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
   }, []); // 仅挂载一次
 
-  // 外部 content 变化时同步到编辑器
+  // 外部 content 变化时同步
   useEffect(() => {
+    if (!vditorReadyRef.current) return; // 未就绪则跳过
     const vditor = vditorRef.current;
     if (!vditor) return;
     if (vditor.getValue() !== content) {
@@ -168,14 +156,14 @@ export function MarkdownEditor({
     }
   }, [content]);
 
-  // 主题跟随全局 colorMode 切换
+  // 主题切换
   useEffect(() => {
+    if (!vditorReadyRef.current) return;
     vditorRef.current?.setTheme(colorMode === "dark" ? "dark" : "classic");
   }, [colorMode]);
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
-      {/* 视图切换与复原按钮 */}
       <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
         <FlatTabButton active={preview === "edit"} onClick={() => setPreview("edit")}>
           {t("edit")}
@@ -203,13 +191,11 @@ export function MarkdownEditor({
         )}
       </FlatInset>
 
-      {/* 编辑器与预览区域 */}
       <div
         className={`grid grid-cols-1 gap-0 sm:gap-4 ${
           preview === "comparison" ? "lg:grid-cols-2" : ""
         }`}
       >
-        {/* 编辑区（Vditor） */}
         <div className={"flex min-w-0 flex-col " + (preview === "preview" ? "hidden" : "")}>
           <div
             className="relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"
@@ -219,7 +205,6 @@ export function MarkdownEditor({
           </div>
         </div>
 
-        {/* 纯预览区（自定义 Markdown 渲染） */}
         <div
           className={
             "min-h-0 overflow-y-auto rounded-none border-0 bg-w px-4 py-4 border-t sm:border-none " +
