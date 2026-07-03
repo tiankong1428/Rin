@@ -13,7 +13,7 @@ import {Cache} from '../utils/cache';
 import {useSiteConfig} from "../hooks/useSiteConfig";
 import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
-import { MarkdownEditor } from '../components/markdown_editor';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 
 async function publish({
   title,
@@ -23,7 +23,7 @@ async function publish({
   summary,
   tags,
   draft,
-  loginRequired,  // 新增
+  loginRequired,
   createdAt,
   onCompleted,
   showAlert
@@ -34,7 +34,7 @@ async function publish({
   summary: string;
   tags: string[];
   draft: boolean;
-  loginRequired: boolean;  // 新增
+  loginRequired: boolean;
   alias?: string;
   createdAt?: Date;
   onCompleted?: () => void;
@@ -50,7 +50,7 @@ async function publish({
       tags,
       listed,
       draft,
-      loginRequired,  // 新增
+      loginRequired,
       createdAt: createdAt?.toISOString(),
     }
   );
@@ -77,7 +77,7 @@ async function update({
   tags,
   listed,
   draft,
-  loginRequired,  // 新增
+  loginRequired,
   createdAt,
   onCompleted,
   showAlert
@@ -90,7 +90,7 @@ async function update({
   summary?: string;
   tags?: string[];
   draft?: boolean;
-  loginRequired?: boolean;  // 新增
+  loginRequired?: boolean;
   createdAt?: Date;
   onCompleted?: () => void;
   showAlert: ShowAlertType;
@@ -106,7 +106,7 @@ async function update({
       tags,
       listed,
       draft,
-      loginRequired,  // 新增
+      loginRequired,
       createdAt: createdAt?.toISOString(),
     }
   );
@@ -134,15 +134,16 @@ export function WritingPage({ id }: { id?: number }) {
   const [alias, setAlias] = cache.useCache("alias", "");
   const [draft, setDraft] = useState(false);
   const [listed, setListed] = useState(true);
-    const [loginRequired, setLoginRequired] = useState(false);  // 新增
+  const [loginRequired, setLoginRequired] = useState(false);
   const [content, setContent] = cache.useCache("content", "");
-  const [pageError, setPageError] = useState<string | null>(null);  // 新增：页面错误状态
+  const [pageError, setPageError] = useState<string | null>(null);
   const [feedData, setFeedData] = useState<any>(null);
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
   const { showAlert, AlertUI } = useAlert()
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
+
   function publishButton() {
     if (publishing) return;
     const tagsplit =
@@ -161,7 +162,7 @@ export function WritingPage({ id }: { id?: number }) {
         tags: tagsplit,
         draft,
         listed,
-        loginRequired,  // 新增
+        loginRequired,
         createdAt,
         onCompleted: () => {
           setPublishing(false)
@@ -186,7 +187,7 @@ export function WritingPage({ id }: { id?: number }) {
         draft,
         alias,
         listed,
-        loginRequired,  // 新增
+        loginRequired,
         createdAt,
         onCompleted: () => {
           setPublishing(false)
@@ -195,15 +196,20 @@ export function WritingPage({ id }: { id?: number }) {
       });
     }
   }
-  // 检查登录状态，未登录显示错误页面
+
+  // 登录状态监听：区分加载中/未登录/已登录，不再瞬间报错卡住页面
   useEffect(() => {
-    if (!profile) {
+    if (profile === undefined) return;
+    if (profile === null) {
       setPageError("Login required");
-    } else if (pageError === "Login required") {
-      setPageError(null);
+    } else {
+      if (pageError === "Login required") setPageError(null);
     }
-  }, [profile]);
-        useEffect(() => {
+  }, [profile, pageError]);
+
+  // 拉取文章：等待profile加载完成再请求，避免feedData提前就绪时序错乱、永久loading
+  useEffect(() => {
+    if (profile === undefined) return;
     if (id) {
       client.feed
         .get(id)
@@ -213,29 +219,32 @@ export function WritingPage({ id }: { id?: number }) {
             return;
           }
           if (data) {
-            // 先存数据，权限检查等 profile 加载完再做
             setFeedData(data);
           }
         });
     }
-  }, [id]);
-  // 等 profile 和文章数据都准备好了，再检查权限并填充表单
-  useEffect(() => {
-    if (!feedData || !profile) return;
+  }, [id, profile]);
 
-    // 权限检查：不是自己的文章且不是管理员，禁止编辑
+  // 填充表单+权限校验，修复空草稿、profile延迟导致不渲染内容
+  useEffect(() => {
+    if (!feedData) return;
+    if (profile === undefined) return;
+    if (profile === null) return;
+
+    // 权限校验
     if (feedData.uid !== profile.id && !isAdmin) {
       setPageError("无权限编辑此文章");
       return;
     }
 
-    // 获取本地草稿的最后修改时间
     const localModifiedAt = cache.getModifiedAt();
-    // 获取服务器的最后更新时间
+    const localTitle = cache.getRaw("title");
+    const localContent = cache.getRaw("content");
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+    const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
 
-    if (localModifiedAt === null) {
-      // 情况 1：本地没有草稿 → 直接用服务器的，不弹窗
+    // 本地无草稿 / 草稿完全空白，强制读取服务器内容
+    if (localModifiedAt === null || localDraftIsEmpty) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
@@ -243,18 +252,14 @@ export function WritingPage({ id }: { id?: number }) {
       }
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-      // 同步时间戳
       cache.touchModifiedAt();
-    } 
-    else if (serverUpdatedAt > localModifiedAt) {
-      // 情况 2：服务器版本更新 → 弹窗问用户要不要用服务器的
+    } else if (serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
         "点击「确定」：加载服务器最新版本\n" +
         "点击「取消」：继续编辑本地草稿"
       );
       if (useServer) {
-        // 用户选确定，用服务器版本覆盖本地
         if (feedData.title) setTitle(feedData.title);
         if (feedData.content) setContent(feedData.content);
         if (feedData.hashtags) {
@@ -262,19 +267,17 @@ export function WritingPage({ id }: { id?: number }) {
         }
         if ((feedData as any).alias) setAlias((feedData as any).alias);
         if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-        // 把本地草稿时间戳同步成服务器的时间
         cache.touchModifiedAt();
       }
-      // 用户选取消，什么都不做，继续用本地草稿
     }
-    // 情况 3：本地草稿更新，或者时间一样 → 什么都不做，继续用本地的
 
-    // 这几个字段每次都用服务器的（因为没缓存）
+    // 固定后台字段，不受本地草稿影响
     setListed((feedData as any).listed === 1);
     setDraft((feedData as any).draft === 1);
     setLoginRequired((feedData as any).loginRequired === 1);
     setCreatedAt(new Date(feedData.createdAt));
   }, [feedData, profile]);
+
   const debouncedUpdate = useCallback(
     _.debounce(() => {
       mermaid.initialize({
@@ -297,9 +300,11 @@ export function WritingPage({ id }: { id?: number }) {
     }, 100),
     []
   );
+
   useEffect(() => {
     debouncedUpdate();
   }, [content, debouncedUpdate]);
+
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
@@ -386,7 +391,6 @@ export function WritingPage({ id }: { id?: number }) {
                 placeholder={t('listed')}
               />
             </FlatMetaRow>
-{/* 新增：仅登录可见 */}
             <FlatMetaRow
               className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
               onClick={() => setLoginRequired(!loginRequired)}
@@ -398,8 +402,8 @@ export function WritingPage({ id }: { id?: number }) {
                 setValue={setLoginRequired}
                 placeholder="仅登录可见"
               />
-</FlatMetaRow>
-                        {isAdmin && (
+            </FlatMetaRow>
+            {isAdmin && (
               <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
                 <p className="mr-2 whitespace-nowrap">
                   {t('created_at')}
@@ -412,7 +416,7 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
-   // 有错误时显示错误页面
+  // 错误页面分支
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -447,7 +451,7 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-2xl bg-w p-8 text-center">
             <h1 className="text-2xl font-bold t-primary">{title}</h1>
-            {desc && <p className="mt-2 text-sm text-neutral-500">{desc}</p>}
+            {desc && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{desc}</p>}
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
                 <button
@@ -466,10 +470,12 @@ export function WritingPage({ id }: { id?: number }) {
             </div>
           </div>
         </div>
+        <AlertUI />
       </>
     );
   }
 
+  // 无文章数据时展示加载，有数据直接渲染表单
   return (
     <>
       <Helmet>
@@ -480,13 +486,18 @@ export function WritingPage({ id }: { id?: number }) {
         <meta property="og:type" content="article" />
         <meta property="og:url" content={document.URL} />
       </Helmet>
-      <div className="mt-2 flex flex-col gap-4 t-primary sm:gap-6">
-        {MetaInput({ className: "p-4 sm:p-5 md:p-6" })}
-
-        <FlatPanel className="overflow-hidden p-0">
-          <MarkdownEditor content={content} setContent={setContent} height='680px' />
-        </FlatPanel>
-      </div>
+      {!feedData ? (
+        <div className="flex justify-center py-20">
+          <Loading type="spin" height={40} width={40} />
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-col gap-4 t-primary sm:gap-6">
+          {MetaInput({ className: "p-4 sm:p-5 md:p-6" })}
+          <FlatPanel className="overflow-hidden p-0">
+            <MarkdownEditor content={content} setContent={setContent} height='680px' />
+          </FlatPanel>
+        </div>
+      )}
       <AlertUI />
     </>
   );
