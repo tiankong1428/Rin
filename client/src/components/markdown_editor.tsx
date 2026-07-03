@@ -70,7 +70,7 @@ export function MarkdownEditor({
     const timer = setTimeout(() => {
       try {
         const vditor = new Vditor(container, {
-cdn: "./assets/vditor",
+cdn: "/assets/vditor",
 lang: "zh_CN",
   height: parseInt(height),
   mode: "ir",
