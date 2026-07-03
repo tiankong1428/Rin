@@ -21,14 +21,14 @@ export default defineConfig(({ mode }) => {
       visualizer({ open: !isDev }),
       // 👇 就是缺了这一段，之前只 import 了没在 plugins 里用
       copy({
-        hook: "writeBundle",
-        targets: [
-          {
-            src: "node_modules/vditor/dist/**/*",
-            dest: "../dist/client/assets/vditor/dist"
-          }
-        ]
-      })
+  hook: "closeBundle",
+  targets: [
+    {
+      src: "node_modules/vditor/dist/**/*",
+      dest: "../dist/client/assets/vditor/dist"
+    }
+  ]
+})
     ],
     server: {
       proxy: {
