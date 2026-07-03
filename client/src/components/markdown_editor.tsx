@@ -9,7 +9,6 @@ import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 import { Markdown } from "./markdown";
 
-
 interface MarkdownEditorProps {
   content: string;
   setContent: (content: string) => void;
@@ -49,54 +48,64 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     }
   }
 
+  // 粘贴支持多张图片，文本粘贴放行不阻断快捷键
   const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
     const clipboardData = event.clipboardData;
-    // 仅拦截图片粘贴，文本粘贴直接放行，不阻断Ctrl/Cmd+C/V快捷键
-    if (clipboardData.files.length !== 1) return;
+    const files = Array.from(clipboardData.files);
+    if (files.length === 0) return;
     event.preventDefault();
 
     const editor = editorRef.current;
     if (!editor) return;
-    editor.trigger(undefined, "undo", undefined);
-    setUploading(true);
-    const myfile = clipboardData.files[0] as File;
     const selection = editor.getSelection();
-    if (!selection) {
-      setUploading(false);
-      return;
-    }
-    void insertImage(myfile, selection, showAlert).finally(() => {
-      setUploading(false);
-    });
+    if (!selection) return;
+
+    setUploading(true);
+    const uploadAll = async () => {
+      for (const file of files) {
+        await insertImage(file, selection, showAlert);
+      }
+    };
+    void uploadAll().finally(() => setUploading(false));
   };
 
   function UploadImageButton() {
     const uploadRef = useRef<HTMLInputElement>(null);
 
     const upChange = (event: any) => {
-      for (let i = 0; i < event.currentTarget.files.length; i++) {
-        const file = event.currentTarget.files[i];
+      const files = event.currentTarget.files;
+      if (!files.length) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      const selection = editor.getSelection();
+      if (!selection) return;
+
+      // 校验所有图片大小
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         if (file.size > 5 * 1024000) {
           showAlert(t("upload.failed$size", { size: 5 }));
           uploadRef.current!.value = "";
-        } else {
-          const editor = editorRef.current;
-          if (!editor) return;
-          const selection = editor.getSelection();
-          if (!selection) return;
-          setUploading(true);
-          void insertImage(file, selection, showAlert).finally(() => {
-            setUploading(false);
-          });
+          return;
         }
       }
+
+      setUploading(true);
+      const uploadAll = async () => {
+        for (let i = 0; i < files.length; i++) {
+          await insertImage(files[i], selection, showAlert);
+        }
+      };
+      void uploadAll().finally(() => {
+        setUploading(false);
+        uploadRef.current!.value = "";
+      });
     };
 
     return (
       <button
         type="button"
         onClick={() => uploadRef.current?.click()}
-        // 缩小内边距，手机更容易点击
         className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
       >
         <input
@@ -104,6 +113,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
           onChange={upChange}
           className="hidden"
           type="file"
+          multiple
           accept="image/gif,image/jpeg,image/jpg,image/png"
         />
         <i className="ri-image-add-line" />
@@ -111,8 +121,6 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
       </button>
     );
   }
-
-  /* ---------------- Monaco Mount & IME Optimization ---------------- */
 
   const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
@@ -137,8 +145,6 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     });
   };
 
-  /* ---------------- synchronization ---------------- */
-
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -147,14 +153,10 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     if (!model) return;
 
     const editorValue = model.getValue();
-
-    // Avoid infinite loops & prevent overwriting content being edited
     if (editorValue !== content) {
       editor.setValue(content);
     }
   }, [content]);
-
-  /* ---------------- UI ---------------- */
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
@@ -179,15 +181,17 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
               e.preventDefault();
               const editor = editorRef.current;
               if (!editor) return;
-              for (let i = 0; i < e.dataTransfer.files.length; i++) {
-                const selection = editor.getSelection();
-                if (!selection) return;
-                const file = e.dataTransfer.files[i];
-                setUploading(true);
-                void insertImage(file, selection, showAlert).finally(() => {
-                  setUploading(false);
-                });
-              }
+              const files = Array.from(e.dataTransfer.files);
+              if (!files.length) return;
+              const selection = editor.getSelection();
+              if (!selection) return;
+              setUploading(true);
+              const uploadAll = async () => {
+                for (const file of files) {
+                  await insertImage(file, selection, showAlert);
+                }
+              };
+              void uploadAll().finally(() => setUploading(false));
             }}
             onPaste={handlePaste}
           >
@@ -199,26 +203,17 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
               theme={colorMode === "dark" ? "vs-dark" : "light"}
               options={{
                 wordWrap: "on",
-
-                // Chinese IME stability key
                 fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
                 fontLigatures: false,
                 letterSpacing: 0,
-
                 fontSize: 14,
                 lineNumbers: "off",
-
                 accessibilitySupport: "off",
                 unicodeHighlight: { ambiguousCharacters: false },
-
                 renderWhitespace: "none",
                 renderControlCharacters: false,
                 smoothScrolling: false,
-
                 dragAndDrop: true,
-                // 移除 pasteAs 关闭配置，恢复原生复制粘贴快捷键
-                touchSupport: true, // 开启移动端触控适配
-                mouseWheelZoom: false, // 关闭滚轮缩放，手机更稳定
               }}
             />
           </div>
