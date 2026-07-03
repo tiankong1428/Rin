@@ -222,33 +222,23 @@ export function MarkdownEditor({
               defaultValue={content}
               theme={colorMode === "dark" ? "vs-dark" : "light"}
               options={{
-                wordWrap: "on",
-                fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
-                fontLigatures: false,
-                letterSpacing: 0,
-                fontSize: 14,
-                lineNumbers: "off",
-                accessibilitySupport: "off",
-                unicodeHighlight: { ambiguousCharacters: false },
-                renderWhitespace: "none",
-                renderControlCharacters: false,
-                smoothScrolling: false,
-                minimap: {
-                  enabled: false
-                },
-                dragAndDrop: true,
-                // 修复1：关闭编辑器自定义右键菜单，手机长按唤起系统复制粘贴
-                contextmenu: false,
-                // 修复2：放行系统原生 Ctrl/Cmd + C/V 剪贴快捷键，解决浏览器复制失效
-                keyboard: {
-                  bindings: [
-                    { key: "ctrl+c", command: null },
-                    { key: "ctrl+v", command: null },
-                    { key: "meta+c", command: null },
-                    { key: "meta+v", command: null },
-                  ]
-                }
-              }}
+  wordWrap: "on",
+  fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
+  fontLigatures: false,
+  letterSpacing: 0,
+  fontSize: 14,
+  lineNumbers: "off",
+  accessibilitySupport: "off",
+  unicodeHighlight: { ambiguousCharacters: false },
+  renderWhitespace: "none",
+  renderControlCharacters: false,
+  smoothScrolling: false,
+  minimap: {
+    enabled: false
+  },
+  dragAndDrop: true,
+  contextmenu: false
+}}
             />
           </div>
         </div>
