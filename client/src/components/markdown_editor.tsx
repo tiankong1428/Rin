@@ -55,9 +55,11 @@ export function MarkdownEditor({
     }
   }
 
+  // 仅拦截粘贴图片，文字粘贴放行不阻断复制快捷键
   const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
     const clipboardData = event.clipboardData;
     const files = Array.from(clipboardData.files);
+    // 无图片则直接放行原生粘贴，不阻止默认行为
     if (files.length === 0) return;
     event.preventDefault();
 
@@ -170,7 +172,7 @@ export function MarkdownEditor({
         <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
         <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
         <div className="flex-grow" />
-        <UploadImageButton />
+        {/* 复原按钮在上传图片左侧 */}
         {onRestoreServer && (
           <button
             onClick={onRestoreServer}
@@ -179,6 +181,7 @@ export function MarkdownEditor({
             <span>复原</span>
           </button>
         )}
+        <UploadImageButton />
         {uploading &&
           <div className="flex flex-row items-center space-x-2">
             <Loading type="spin" color="#FC466B" height={16} width={16} />
@@ -188,8 +191,9 @@ export function MarkdownEditor({
       </FlatInset>
       <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
+          {/* 增加CSS屏蔽monaco内置右键，不屏蔽浏览器原生长按 */}
           <div
-            className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
+            className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w [&_.monaco-editor]:[context-menu:none]"}
             onDrop={(e) => {
               e.preventDefault();
               const editor = editorRef.current;
@@ -229,17 +233,20 @@ export function MarkdownEditor({
                 minimap: {
                   enabled: false
                 },
-                dragAndDrop: true,
-                contextmenu: false
+                dragAndDrop: true
+                // 移除 contextmenu: false，恢复原生长按
               }}
             />
           </div>
         </div>
+        {/* 预览区图片自动缩小适配容器 */}
         <div
           className={"min-h-0 overflow-y-auto rounded-none border-0 bg-w px-4 py-4 border-t sm:border-none " + (preview === 'edit' ? "hidden" : "")}
           style={{ height: height }}
         >
-          <Markdown content={content ? content : placeholder} />
+          <div className="[&_img]:max-w-full [&_img]:h-auto [&_img]:object-contain">
+            <Markdown content={content ? content : placeholder} />
+          </div>
         </div>
       </div>
       <AlertUI />
