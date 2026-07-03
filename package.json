@@ -37,7 +37,6 @@
   },
   "devDependencies": {
     "turbo": "^1.13.3",
-    "wrangler": "4.71.0",
-"rollup-plugin-copy": "^3.5.0"
+    "wrangler": "4.71.0"
   }
 }
