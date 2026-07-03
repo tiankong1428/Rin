@@ -15,7 +15,7 @@ import { siteName } from "../utils/constants";
 import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
 
-// ---------- 发布 / 更新逻辑（保持不变） ----------
+// ---------- 发布 / 更新逻辑 ----------
 async function publish({
   title,
   alias,
@@ -136,31 +136,24 @@ export function WritingPage({ id }: { id?: number }) {
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
 
-  // ---------- 新增：缓存就绪标志，防止服务器数据过早覆盖本地草稿 ----------
   const [initLock, setInitLock] = useState(true);
   const [cacheReady, setCacheReady] = useState(false);
 
-  // 解锁 initLock（延迟 300ms，让缓存 hook 优先完成状态设置）
+  // 解锁缓存延时锁
   useEffect(() => {
     const timer = setTimeout(() => setInitLock(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
-  // 当 initLock 解锁后，确认缓存已读取完成
+  // 缓存就绪判断
   useEffect(() => {
     if (!initLock) {
-      // 只要有修改时间戳，或者内容非空（说明缓存已存在），即认为缓存就绪
       const modifiedAt = cache.getModifiedAt();
-      if (modifiedAt !== null || content !== "") {
-        setCacheReady(true);
-      } else {
-        // 新文章，无缓存，也视为就绪
-        setCacheReady(true);
-      }
+      setCacheReady(modifiedAt !== null || content !== "");
     }
   }, [initLock, cache, content]);
 
-  // ---------- 服务器版本复原（修复：延迟更新缓存时间戳） ----------
+  // ---------- 复原服务器内容 ----------
   function handleRestoreServer() {
     if (!feedData) return;
     const ok = confirm("确定将丢弃本地所有草稿，使用服务器最新内容？");
@@ -172,16 +165,13 @@ export function WritingPage({ id }: { id?: number }) {
     }
     if ((feedData as any).alias) setAlias((feedData as any).alias);
     if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-    // 微任务延迟，等state写入缓存再更新修改时间
-    queueMicrotask(() => {
-      cache.touchModifiedAt();
-    });
+    queueMicrotask(() => cache.touchModifiedAt());
   }
 
-  // ---------- 发布按钮逻辑 ----------
+  // ---------- 发布按钮 ----------
   function publishButton() {
     if (publishing) return;
-    const tagsplit = tags.split("#").filter(tag => tag.trim() !== "").map(tag => tag.trim());
+    const tagsplit = tags.split("#").filter(tag => tag.trim()).map(tag => tag.trim());
     if (id !== undefined) {
       setPublishing(true);
       update({
@@ -199,14 +189,8 @@ export function WritingPage({ id }: { id?: number }) {
         showAlert
       });
     } else {
-      if (!title.trim()) {
-        showAlert(t("title.empty"));
-        return;
-      }
-      if (!content.trim()) {
-        showAlert(t("content.empty"));
-        return;
-      }
+      if (!title.trim()) return showAlert(t("title.empty"));
+      if (!content.trim()) return showAlert(t("content.empty"));
       setPublishing(true);
       publish({
         title,
@@ -224,49 +208,44 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
-  // ---------- 登录检测 ----------
+  // 登录状态检测
   useEffect(() => {
     if (profile === undefined) return;
-    if (profile === null) {
-      setPageError("Login required");
-    } else {
-      if (pageError === "Login required") setPageError(null);
-    }
+    if (profile === null) setPageError("Login required");
+    else if (pageError === "Login required") setPageError(null);
   }, [profile, pageError]);
 
-  // ---------- 拉取文章数据（修复：拿到数据后主动回填表单） ----------
+  // ---------- 拉取文章数据（仅编辑模式id存在才请求） ----------
   useEffect(() => {
-    if (id) {
-      client.feed.get(id).then(({ data, error }) => {
-        if (error) {
-          setPageError(typeof error === "string" ? error : t("request.failed"));
-          return;
+    // 新建写作 id 不存在，不请求接口
+    if (!id) return;
+    client.feed.get(id).then(({ data, error }) => {
+      if (error) {
+        setPageError(typeof error === "string" ? error : t("request.failed"));
+        return;
+      }
+      if (data) {
+        setFeedData(data);
+        const localModifiedAt = cache.getModifiedAt();
+        if (localModifiedAt === null) {
+          if (data.title) setTitle(data.title);
+          if (data.content) setContent(data.content);
+          if (data.hashtags) setTags(data.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+          if ((data as any).alias) setAlias((data as any).alias);
+          if ((data as any).summary) setSummary((data as any).summary || "");
+          cache.touchModifiedAt();
         }
-        if (data) {
-          setFeedData(data);
-          // 本地无草稿，直接填充服务器数据，解决首次进入空白
-          const localModifiedAt = cache.getModifiedAt();
-          if (localModifiedAt === null) {
-            if (data.title) setTitle(data.title);
-            if (data.content) setContent(data.content);
-            if (data.hashtags) {
-              setTags(data.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-            }
-            if ((data as any).alias) setAlias((data as any).alias);
-            if ((data as any).summary) setSummary((data as any).summary || "");
-            cache.touchModifiedAt();
-          }
-        }
-      });
-    }
+      }
+    });
   }, [id, cache, t]);
 
-  // ---------- 草稿对比 / 服务器数据覆盖逻辑 ----------
+  // ---------- 草稿对比弹窗逻辑（新增：发布中直接跳过，避免弹窗提前弹出） ----------
   useEffect(() => {
-    // 必须同时满足：服务器数据已加载、initLock 已解除、缓存已就绪
-    if (!feedData || initLock || !cacheReady) return;
-    if (profile === undefined) return;
-    if (profile === null) return;
+    // 新建文章无id直接跳过
+    if (!id) return;
+    // 发布中、无服务器数据、锁未解锁、缓存未就绪直接跳过
+    if (!feedData || initLock || !cacheReady || publishing) return;
+    if (profile === undefined || profile === null) return;
 
     if (feedData.uid !== profile.id && !isAdmin) {
       setPageError("无权限编辑此文章");
@@ -276,7 +255,6 @@ export function WritingPage({ id }: { id?: number }) {
     const localModifiedAt = cache.getModifiedAt();
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-    // 本地有草稿 + 服务器更新，弹窗选择
     if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
@@ -286,9 +264,7 @@ export function WritingPage({ id }: { id?: number }) {
       if (useServer) {
         if (feedData.title) setTitle(feedData.title);
         if (feedData.content) setContent(feedData.content);
-        if (feedData.hashtags) {
-          setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-        }
+        if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
         if ((feedData as any).alias) setAlias((feedData as any).alias);
         if ((feedData as any).summary) setSummary((feedData as any).summary || "");
         cache.touchModifiedAt();
@@ -296,13 +272,10 @@ export function WritingPage({ id }: { id?: number }) {
       return;
     }
 
-    // 完全无草稿才加载服务器
     if (localModifiedAt === null) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
-      if (feedData.hashtags) {
-        setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-      }
+      if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
@@ -312,9 +285,9 @@ export function WritingPage({ id }: { id?: number }) {
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile, initLock, cacheReady]);
+  }, [feedData, profile, initLock, cacheReady, id, publishing]);
 
-  // ---------- mermaid 渲染 ----------
+  // mermaid 渲染防抖
   const debouncedUpdate = useCallback(
     _.debounce(() => {
       mermaid.initialize({ startOnLoad: false, theme: "default" });
@@ -329,7 +302,7 @@ export function WritingPage({ id }: { id?: number }) {
 
   useEffect(() => debouncedUpdate(), [content, debouncedUpdate]);
 
-  // ---------- UI 子组件 ----------
+  // 发布按钮UI
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
@@ -343,6 +316,7 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
+  // 元信息输入面板
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
@@ -439,7 +413,7 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
-  // ---------- 错误页面渲染 ----------
+  // 错误页面
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -498,7 +472,36 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // ---------- 正常页面渲染 ----------
+  // ---------- 渲染区分新建/编辑 ----------
+  // 新建写作页面 直接渲染编辑器，不等待feedData
+  if (!id) {
+    return (
+      <>
+        <Helmet>
+          <title>{`${t('writing')} - ${siteConfig.name}`}</title>
+          <meta property="og:site_name" content={siteName} />
+          <meta property="og:title" content={t('writing')} />
+          <meta property="og:image" content={siteConfig.avatar} />
+          <meta property="og:type" content="article" />
+          <meta property="og:url" content={document.URL} />
+        </Helmet>
+        <div className="mt-2 flex flex-col gap-4 sm:gap-6">
+          <MetaInput className="p-4 sm:p-5 md:p-6" />
+          <FlatPanel className="overflow-hidden p-0">
+            <MarkdownEditor
+              content={content}
+              setContent={setContent}
+              height='680px'
+              onRestoreServer={handleRestoreServer}
+            />
+          </FlatPanel>
+        </div>
+        <AlertUI />
+      </>
+    );
+  }
+
+  // 编辑模式，等待接口加载完成
   return (
     <>
       <Helmet>
