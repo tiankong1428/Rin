@@ -18,16 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      visualizer({ open: !isDev }),
-      copy({
-        hook: "writeBundle",
-        targets: [
-          {
-            src: "node_modules/vditor/dist/**/*",
-            dest: "../dist/client/assets/vditor"
-          }
-        ]
-      })
+      visualizer({ open: !isDev })
     ],
     server: {
       proxy: {
