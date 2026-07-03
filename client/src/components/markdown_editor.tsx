@@ -1,5 +1,5 @@
 import Editor from '@monaco-editor/react';
-import { editor } from 'monaco-editor';
+import { editor, KeyMod, KeyCode } from 'monaco-editor';
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
@@ -127,106 +127,48 @@ export function MarkdownEditor({
     );
   }
 
-  const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
-    editorRef.current = editor;
+  const handleEditorMount = (editorIns: editor.IStandaloneCodeEditor) => {
+    editorRef.current = editorIns;
 
-    // ========== 核心修复1：只屏蔽Monaco自带菜单，保留浏览器原生右键/长按菜单 ==========
-    const editorDom = editor.getDomNode();
-    if (editorDom) {
-      // 捕获阶段拦截，阻止事件冒泡到Monaco的菜单处理逻辑
-      // 但不调用 preventDefault，所以浏览器原生菜单会正常弹出
-      editorDom.addEventListener('contextmenu', (e) => {
+    // 只拦截monaco内置右键，保留浏览器原生长按/右键菜单
+    const dom = editorIns.getDomNode();
+    if (dom) {
+      dom.addEventListener('contextmenu', (e) => {
         e.stopPropagation();
       }, true);
     }
 
-    // ========== 核心修复2：手动接管复制剪切快捷键，兼容所有浏览器 ==========
-    editor.addCommand(editor.KeyMod.CtrlCmd | editor.KeyCode.KEY_C, () => {
-      const selection = editor.getSelection();
-      if (!selection) return;
-      const selectedText = editor.getModel()?.getValueInRange(selection) || '';
-      // 用浏览器原生API写入剪贴板
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(selectedText).catch(() => {
-          // 降级方案
-          const textarea = document.createElement('textarea');
-          textarea.value = selectedText;
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
-        });
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = selectedText;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-    });
-
-    editor.addCommand(editor.KeyMod.CtrlCmd | editor.KeyCode.KEY_X, () => {
-      const selection = editor.getSelection();
-      if (!selection) return;
-      const selectedText = editor.getModel()?.getValueInRange(selection) || '';
-      // 先复制
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(selectedText).catch(() => {
-          const textarea = document.createElement('textarea');
-          textarea.value = selectedText;
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
-        });
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = selectedText;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-      // 再删除选中内容（剪切）
-      editor.executeEdits(undefined, [{
-        range: selection,
-        text: '',
-      }]);
-    });
-
-    editor.onDidCompositionStart(() => {
+    editorIns.onDidCompositionStart(() => {
       isComposingRef.current = true;
     });
-
-    editor.onDidCompositionEnd(() => {
+    editorIns.onDidCompositionEnd(() => {
       isComposingRef.current = false;
-      setContent(editor.getValue());
+      setContent(editorIns.getValue());
     });
-
-    editor.onDidChangeModelContent(() => {
-      if (!isComposingRef.current) {
-        setContent(editor.getValue());
-      }
+    editorIns.onDidChangeModelContent(() => {
+      if (!isComposingRef.current) setContent(editorIns.getValue());
     });
-
-    editor.onDidBlurEditorText(() => {
-      setContent(editor.getValue());
-    });
+    editorIns.onDidBlurEditorText(() => setContent(editorIns.getValue()));
   };
 
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
-
     const model = editor.getModel();
     if (!model) return;
-
     const editorValue = model.getValue();
-    if (editorValue !== content) {
-      editor.setValue(content);
-    }
+    if (editorValue !== content) editor.setValue(content);
   }, [content]);
+
+  // 外层原生键盘兜底，放行复制剪切粘贴快捷键
+  const onKeyDownCapture = (e: React.KeyboardEvent) => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    // 放行 c / x / v 系统剪贴快捷键，不被编辑器劫持
+    if (e.key === 'c' || e.key === 'x' || e.key === 'v') {
+      return;
+    }
+  };
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
@@ -235,7 +177,6 @@ export function MarkdownEditor({
         <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
         <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
         <div className="flex-grow" />
-        {/* 复原按钮在上传图片左侧 */}
         {onRestoreServer && (
           <button
             onClick={onRestoreServer}
@@ -256,6 +197,7 @@ export function MarkdownEditor({
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
           <div
             className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
+            onKeyDownCapture={onKeyDownCapture}
             onDrop={(e) => {
               e.preventDefault();
               const editor = editorRef.current;
@@ -266,9 +208,7 @@ export function MarkdownEditor({
               if (!selection) return;
               setUploading(true);
               const uploadAll = async () => {
-                for (const file of files) {
-                  await insertImage(file, selection, showAlert);
-                }
+                for (const file of files) await insertImage(file, selection, showAlert);
               };
               void uploadAll().finally(() => setUploading(false));
             }}
@@ -292,11 +232,8 @@ export function MarkdownEditor({
                 renderWhitespace: "none",
                 renderControlCharacters: false,
                 smoothScrolling: false,
-                minimap: {
-                  enabled: false
-                },
+                minimap: { enabled: false },
                 dragAndDrop: true
-                // 移除 contextmenu: false，恢复原生长按/右键
               }}
             />
           </div>
