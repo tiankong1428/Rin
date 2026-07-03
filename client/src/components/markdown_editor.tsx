@@ -1,12 +1,11 @@
-import React, { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import Vditor from "vditor";
 import { useTranslation } from "react-i18next";
 import Loading from "react-loading";
-import { FlatInset, FlatTabButton } from "@rin/ui";
+import { FlatInset } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
-import { Markdown } from "./markdown";
 
 interface MarkdownEditorProps {
   content: string;
@@ -16,7 +15,6 @@ interface MarkdownEditorProps {
   onRestoreServer?: () => void;
 }
 
-// 导出名保持 MarkdownEditor，页面无需改动
 export function MarkdownEditor({
   content,
   setContent,
@@ -37,7 +35,7 @@ export function MarkdownEditor({
     const insertTexts: string[] = [];
     try {
       for (const file of files) {
-        const res = await uploadImageFile(file, {} as any, showAlert);
+        const res = await uploadImageFile(file, showAlert);
         const imgMd = buildMarkdownImage(file.name, res.url, {
           blurhash: res.blurhash,
           width: res.width,
@@ -46,8 +44,10 @@ export function MarkdownEditor({
         insertTexts.push(imgMd);
       }
       vditorRef.current?.insertValue(insertTexts.join("\n"));
+      return "";
     } catch (err) {
       showAlert(t("upload.failed"));
+      return "";
     } finally {
       setUploading(false);
     }
@@ -60,9 +60,9 @@ export function MarkdownEditor({
       height,
       placeholder,
       mode: "sv",
-      theme: isDark ? "dark" : "light",
+      theme: isDark ? "dark" : "classic",
       preview: {
-        theme: { current: isDark ? "dark" : "light" },
+        theme: { current: isDark ? "dark" : "classic" },
       },
       cache: false,
       value: content,
@@ -70,10 +70,7 @@ export function MarkdownEditor({
       upload: {
         accept: "image/*",
         multiple: true,
-        handler: async (files) => {
-          await uploadFile(files);
-          return false;
-        },
+        handler: uploadFile,
       },
       toolbar: [
         "emoji",
@@ -107,7 +104,6 @@ export function MarkdownEditor({
     };
   }, []);
 
-  // 外部内容更新同步编辑器（复原功能）
   useEffect(() => {
     if (!vditorRef.current) return;
     if (vditorRef.current.getValue() !== content) {
@@ -123,11 +119,8 @@ export function MarkdownEditor({
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
       <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
-        <FlatTabButton active onClick={() => vditorRef.current?.setMode("sv")}>
-          {t("comparison")}
-        </FlatTabButton>
         <div className="flex-grow" />
-        {/* 复原按钮在上传图片左侧 */}
+        {/* 复原按钮 在上传左侧 */}
         {onRestoreServer && (
           <button
             onClick={handleRestore}
