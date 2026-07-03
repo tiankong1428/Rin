@@ -130,14 +130,6 @@ export function MarkdownEditor({
   const handleEditorMount = (editorIns: editor.IStandaloneCodeEditor) => {
     editorRef.current = editorIns;
 
-    // 只拦截monaco内置右键，保留浏览器原生长按/右键菜单
-    const dom = editorIns.getDomNode();
-    if (dom) {
-      dom.addEventListener('contextmenu', (e) => {
-        e.stopPropagation();
-      }, true);
-    }
-
     editorIns.onDidCompositionStart(() => {
       isComposingRef.current = true;
     });
@@ -160,14 +152,11 @@ export function MarkdownEditor({
     if (editorValue !== content) editor.setValue(content);
   }, [content]);
 
-  // 外层原生键盘兜底，放行复制剪切粘贴快捷键
+  // 放行系统剪贴快捷键，不劫持C/X/V
   const onKeyDownCapture = (e: React.KeyboardEvent) => {
     const ctrl = e.ctrlKey || e.metaKey;
     if (!ctrl) return;
-    // 放行 c / x / v 系统剪贴快捷键，不被编辑器劫持
-    if (e.key === 'c' || e.key === 'x' || e.key === 'v') {
-      return;
-    }
+    if (e.key === 'c' || e.key === 'x' || e.key === 'v') return;
   };
 
   return (
@@ -195,8 +184,14 @@ export function MarkdownEditor({
       </FlatInset>
       <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
+          {/* 关键样式：放开安卓/iOS原生文本选择，取消块状选区限制，弹出系统菜单 */}
           <div
             className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
+            style={{
+              WebkitUserSelect: "text",
+              userSelect: "text",
+              WebkitTouchCallout: "default",
+            }}
             onKeyDownCapture={onKeyDownCapture}
             onDrop={(e) => {
               e.preventDefault();
@@ -233,7 +228,11 @@ export function MarkdownEditor({
                 renderControlCharacters: false,
                 smoothScrolling: false,
                 minimap: { enabled: false },
-                dragAndDrop: true
+                dragAndDrop: true,
+                touch: {
+                  enable: true,
+                  pointerEvents: true
+                }
               }}
             />
           </div>
