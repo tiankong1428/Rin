@@ -71,7 +71,7 @@ export function MarkdownEditor({
       try {
         const vditor = new Vditor(container, {
           // 新增：禁止加载unpkg远程资源，彻底解决拦截报错
-          cdn: "",
+          cdn: "./assets/vditor",
           height: parseInt(height),
           mode: "ir",
           placeholder,
