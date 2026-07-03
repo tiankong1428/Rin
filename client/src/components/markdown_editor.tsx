@@ -70,64 +70,61 @@ export function MarkdownEditor({
     const timer = setTimeout(() => {
       try {
         const vditor = new Vditor(container, {
-          // 新增：禁止加载unpkg远程资源，彻底解决拦截报错
-          cdn: "./assets/vditor",
-          height: parseInt(height),
-          mode: "ir",
-          placeholder,
-          theme: colorMode === "dark" ? "dark" : "classic",
-          toolbar: [
-            "headings", "bold", "italic", "strike", "link", "|",
-            "list", "ordered-list", "check", "outdent", "indent", "|",
-            "quote", "line", "code", "inline-code", "insert-before", "insert-after", "|",
-            "upload", "table", "|",
-            "undo", "redo", "|",
-            "fullscreen", "edit-mode", "both", "preview", "outline", "code-theme", "export",
-          ],
-          outline: { enable: false, position: "left" },
-          counter: { enable: false },
-          cache: { enable: false },
-          upload: {
-            // 自定义上传处理：支持图片、视频、音频、其他文件
-            handler: async (files: File[]) => {
-              setUploading(true);
-              try {
-                for (const file of files) {
-                  try {
-                    // 调用原上传函数，假设它能处理所有文件类型并返回 URL
-                    const result = await uploadImageFile(file);
-                    const markdown = getFileMarkdown(file, result.url, {
-                      blurhash: (result as any).blurhash,
-                      width: (result as any).width,
-                      height: (result as any).height,
-                    });
-                    vditorRef.current?.insertValue(markdown);
-                  } catch (err) {
-                    console.error(err);
-                    showAlert(err instanceof Error ? err.message : t("upload.failed"));
-                  }
-                }
-              } finally {
-                setUploading(false);
-              }
-              return ""; // 阻止 Vditor 默认插入
-            },
-          },
-          input: (value) => {
-            if (!isComposingRef.current) setContent(value);
-          },
-          after: () => {
-            vditorReadyRef.current = true;
-            if (content && vditor) {
-              try {
-                vditor.setValue(content);
-              } catch (e) {
-                console.warn("Vditor setValue failed:", e);
-              }
-            }
-          },
-          lang: "zh_CN",
-        });
+  // 删掉 cdn 配置
+  height: parseInt(height),
+  mode: "ir",
+  placeholder,
+  theme: colorMode === "dark" ? "dark" : "classic",
+  toolbar: [
+    "headings", "bold", "italic", "strike", "link", "|",
+    "list", "ordered-list", "check", "outdent", "indent", "|",
+    "quote", "line", "code", "inline-code", "insert-before", "insert-after", "|",
+    "upload", "table", "|",
+    "undo", "redo", "|",
+    "fullscreen", "edit-mode", "both", "preview", "outline", "code-theme", "export",
+  ],
+  outline: { enable: false, position: "left" },
+  counter: { enable: false },
+  cache: { enable: false },
+  upload: {
+    handler: async (files: File[]) => {
+      setUploading(true);
+      try {
+        for (const file of files) {
+          try {
+            const result = await uploadImageFile(file);
+            const markdown = getFileMarkdown(file, result.url, {
+              blurhash: (result as any).blurhash,
+              width: (result as any).width,
+              height: (result as any).height,
+            });
+            vditorRef.current?.insertValue(markdown);
+          } catch (err) {
+            console.error(err);
+            showAlert(err instanceof Error ? err.message : t("upload.failed"));
+          }
+        }
+      } finally {
+        setUploading(false);
+      }
+      return "";
+    },
+  },
+  input: (value) => {
+    if (!isComposingRef.current) setContent(value);
+  },
+  after: () => {
+    vditorReadyRef.current = true;
+    if (content && vditor) {
+      try {
+        vditor.setValue(content);
+      } catch (e) {
+        console.warn("Vditor setValue failed:", e);
+      }
+    }
+  },
+  lang: "zh_CN",
+});
 
         vditorRef.current = vditor;
 
