@@ -15,10 +15,29 @@ interface MarkdownEditorProps {
   onRestoreServer?: () => void;
 }
 
+/** 根据文件类型生成对应的 Markdown 或 HTML 片段 */
+function getFileMarkdown(file: File, url: string, extra?: any): string {
+  const type = file.type;
+  const name = file.name;
+  if (type.startsWith("image/")) {
+    return buildMarkdownImage(name, url, {
+      blurhash: extra?.blurhash,
+      width: extra?.width,
+      height: extra?.height,
+    });
+  } else if (type.startsWith("video/")) {
+    return `<video src="${url}" controls style="max-width:100%"></video>`;
+  } else if (type.startsWith("audio/")) {
+    return `<audio src="${url}" controls></audio>`;
+  } else {
+    return `[${name}](${url})`;
+  }
+}
+
 export function MarkdownEditor({
   content,
   setContent,
-  placeholder = "> 在这里输入你的内容",
+  placeholder = "> Write your content here...",
   height = "400px",
   onRestoreServer,
 }: MarkdownEditorProps) {
@@ -66,18 +85,20 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: {
+            // 自定义上传处理：支持图片、视频、音频、其他文件
             handler: async (files: File[]) => {
               setUploading(true);
               try {
                 for (const file of files) {
                   try {
+                    // 调用原上传函数，假设它能处理所有文件类型并返回 URL
                     const result = await uploadImageFile(file);
-                    const imgMarkdown = buildMarkdownImage(file.name, result.url, {
-                      blurhash: result.blurhash,
-                      width: result.width,
-                      height: result.height,
+                    const markdown = getFileMarkdown(file, result.url, {
+                      blurhash: (result as any).blurhash,
+                      width: (result as any).width,
+                      height: (result as any).height,
                     });
-                    vditorRef.current?.insertValue(imgMarkdown);
+                    vditorRef.current?.insertValue(markdown);
                   } catch (err) {
                     console.error(err);
                     showAlert(err instanceof Error ? err.message : t("upload.failed"));
@@ -86,7 +107,7 @@ export function MarkdownEditor({
               } finally {
                 setUploading(false);
               }
-              return "";
+              return ""; // 阻止 Vditor 默认插入
             },
           },
           input: (value) => {
@@ -107,7 +128,7 @@ export function MarkdownEditor({
 
         vditorRef.current = vditor;
 
-        // 输入法监听
+        // 中文输入法处理
         const editorEl = container.querySelector(".vditor-ir");
         if (editorEl) {
           const onCompositionStart = () => { isComposingRef.current = true; };
@@ -136,7 +157,7 @@ export function MarkdownEditor({
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-  }, []);
+  }, []); // 仅挂载一次
 
   // 外部 content 同步
   useEffect(() => {
@@ -183,7 +204,10 @@ export function MarkdownEditor({
       </FlatInset>
 
       {/* 编辑器全宽 */}
-      <div className="relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w" style={{ height }}>
+      <div
+        className="relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"
+        style={{ height }}
+      >
         <div ref={editorContainerRef} className="vditor-container" style={{ height: "100%" }} />
       </div>
 
