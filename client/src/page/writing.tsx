@@ -1,34 +1,20 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import {useCallback, useContext, useEffect, useState} from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { ProfileContext } from '../state/profile';
-import {Helmet} from "react-helmet";
-import {useTranslation} from "react-i18next";
+import { Helmet } from "react-helmet";
+import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
-import {ShowAlertType, useAlert} from '../components/dialog';
-import {Checkbox, Input} from "../components/input";
+import { FlatInset, FlatTabButton } from "@rin/ui";
+import { ShowAlertType, useAlert } from './dialog';
+import { Checkbox, Input } from "../components/input";
 import { DateTimeInput, FlatMetaRow, FlatPanel } from "@rin/ui";
 import { client } from "../app/runtime";
-import {Cache} from '../utils/cache';
-import {useSiteConfig} from "../hooks/useSiteConfig";
-import {siteName} from "../utils/constants";
+import { Cache } from '../utils/cache';
+import { useSiteConfig } from "../hooks/useSiteConfig";
+import { siteName } from "../utils/constants";
 import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
-
-interface FeedUpdateParams {
-  id: number;
-  listed: boolean;
-  title?: string;
-  alias?: string;
-  content?: string;
-  summary?: string;
-  tags?: string[];
-  draft?: boolean;
-  loginRequired?: boolean;
-  createdAt?: Date;
-  onCompleted?: () => void;
-  showAlert: ShowAlertType;
-}
 
 async function publish({
   title,
@@ -95,7 +81,20 @@ async function update({
   createdAt,
   onCompleted,
   showAlert
-}: FeedUpdateParams) {
+}: {
+  id: number;
+  listed: boolean;
+  title?: string;
+  alias?: string;
+  content?: string;
+  summary?: string;
+  tags?: string[];
+  draft?: boolean;
+  loginRequired?: boolean;
+  createdAt?: Date;
+  onCompleted?: () => void;
+  showAlert: ShowAlertType;
+}) {
   const t = i18n.t
   const { error } = await client.feed.update(
     id,
@@ -124,7 +123,6 @@ async function update({
   }
 }
 
-// 写作页面
 export function WritingPage({ id }: { id?: number }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -147,38 +145,26 @@ export function WritingPage({ id }: { id?: number }) {
 
   function publishButton() {
     if (publishing) return;
-    const tagsplit =
-      tags
-        .split("#")
-        .filter((tag) => tag !== "")
-        .map((tag) => tag.trim()) || [];
+    const tagsplit = tags.split("#").filter(tag => tag).map(tag => tag.trim());
     if (id !== undefined) {
       setPublishing(true)
       update({
         id,
+        listed,
         title,
         content,
         summary,
         alias,
         tags: tagsplit,
         draft,
-        listed,
         loginRequired,
         createdAt,
-        onCompleted: () => {
-          setPublishing(false)
-        },
+        onCompleted: () => setPublishing(false),
         showAlert
       });
     } else {
-      if (!title) {
-        showAlert(t("title.empty"));
-        return;
-      }
-      if (!content) {
-        showAlert(t("content.empty"));
-        return;
-      }
+      if (!title) return showAlert(t("title.empty"));
+      if (!content) return showAlert(t("content.empty"));
       setPublishing(true)
       publish({
         title,
@@ -190,15 +176,12 @@ export function WritingPage({ id }: { id?: number }) {
         listed,
         loginRequired,
         createdAt,
-        onCompleted: () => {
-          setPublishing(false)
-        },
+        onCompleted: () => setPublishing(false),
         showAlert
       });
     }
   }
 
-  // 登录状态监听
   useEffect(() => {
     if (profile === undefined) return;
     if (profile === null) {
@@ -208,130 +191,79 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章
+  // 页面挂载立刻请求文章，不再阻塞本地草稿渲染
   useEffect(() => {
-    if (profile === undefined) return;
     if (id) {
-      client.feed
-        .get(id)
-        .then(({ data, error }) => {
-          if (error) {
-            setPageError(error instanceof Error ? error.message : t("request.failed"));
-            return;
-          }
-          if (data) {
-            setFeedData(data);
-          }
-        });
+      client.feed.get(id).then(({ data, error }) => {
+        if (error) return setPageError(error.message);
+        if (data) setFeedData(data);
+      });
     }
-  }, [id, profile]);
+  }, [id]);
 
-  // 草稿&服务器版本对比逻辑
+  // 核心修复：本地草稿不被自动覆盖、服务器新版本弹窗正常弹出
   useEffect(() => {
-    if (!feedData) return;
-    if (profile === undefined) return;
-    if (profile === null) return;
-
+    if (!feedData || profile === undefined || profile === null) return;
     if (feedData.uid !== profile.id && !isAdmin) {
       setPageError("无权限编辑此文章");
       return;
     }
 
     const localModifiedAt = cache.getModifiedAt();
-    const localTitle = cache.getRaw("title");
-    const localContent = cache.getRaw("content");
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
-    const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
+    const localTitle = cache.getRaw("title") ?? "";
+    const localContent = cache.getRaw("content") ?? "";
+    const localDraftIsEmpty = !localTitle.trim() && !localContent.trim();
 
-    // 服务器更新弹窗优先
+    // 优先级1：本地存在草稿 + 服务器更新 → 弹窗，由用户选择是否覆盖
     if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
-      const useServer = confirm(
-        "检测到服务器上有更新的版本。\n\n" +
-        "点击「确定」：加载服务器最新版本\n" +
-        "点击「取消」：继续编辑本地草稿"
-      );
+      const useServer = confirm("检测到服务器上有更新的版本。\n\n点击「确定」：加载服务器最新版本\n点击「取消」：继续编辑本地草稿");
       if (useServer) {
-        if (feedData.title) setTitle(feedData.title);
-        if (feedData.content) setContent(feedData.content);
-        if (feedData.hashtags) {
-          setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-        }
-        if ((feedData as any).alias) setAlias((feedData as any).alias);
-        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+        setTitle(feedData.title ?? "");
+        setContent(feedData.content ?? "");
+        setAlias(feedData.alias ?? "");
+        setSummary(feedData.summary ?? "");
+        setTags((feedData.hashtags ?? []).map((item: { name: string }) => `#${item.name}`).join(" "));
         cache.touchModifiedAt();
       }
-    } else if (localModifiedAt === null || localDraftIsEmpty) {
-      if (feedData.title) setTitle(feedData.title);
-      if (feedData.content) setContent(feedData.content);
-      if (feedData.hashtags) {
-        setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-      }
-      if ((feedData as any).alias) setAlias((feedData as any).alias);
-      if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+      return;
+    }
+
+    // 优先级2：完全无草稿（localModifiedAt=null）才加载服务器，有草稿一律保留
+    if (localModifiedAt === null) {
+      setTitle(feedData.title ?? "");
+      setContent(feedData.content ?? "");
+      setAlias(feedData.alias ?? "");
+      setSummary((feedData as any).summary ?? "");
+      setTags((feedData.hashtags ?? []).map((item: { name: string }) => `#${item.name}`).join(" "));
       cache.touchModifiedAt();
     }
 
-    setListed((feedData as any).listed === 1);
-    setDraft((feedData as any).draft === 1);
-    setLoginRequired((feedData as any).loginRequired === 1);
-    setCreatedAt(new Date(feedData.createdAt));
+    // 后台只读状态同步，不覆盖用户编辑内容
+    setListed(!!feedData.listed);
+    setDraft(!!feedData.draft);
+    setLoginRequired(!!feedData.loginRequired);
+    if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
   }, [feedData, profile]);
 
-  const debouncedUpdate = useCallback(
-    _.debounce(() => {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "default",
-      });
-      mermaid.run({
-        suppressErrors: true,
-        nodes: document.querySelectorAll("pre.mermaid_default")
-      }).then(() => {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "dark",
-        });
-        mermaid.run({
-          suppressErrors: true,
-          nodes: document.querySelectorAll("pre.mermaid_dark")
-        });
+  const debouncedUpdate = useCallback(_.debounce(() => {
+    mermaid.initialize({ startOnLoad: false, theme: "default" });
+    mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_default") })
+      .then(() => {
+        mermaid.initialize({ startOnLoad: false, theme: "dark" });
+        mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_dark") });
       })
-    }, 100),
-    []
-  );
-
-  useEffect(() => {
-    debouncedUpdate();
-  }, [content, debouncedUpdate]);
-
-  function PublishImageButton() {
-    return null;
-  }
-
-  function PublishImageButton() {
-    return null;
-  }
-
-  function PublishImageButton() {
-    return null;
-  }
-
-  function PublishImageButton() {
-    return null;
-  }
-
-  function PublishImageButton() {
-    return null;
-  }
+  }, 100), []);
+  useEffect(() => debouncedUpdate(), [content, debouncedUpdate]);
 
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
         onClick={publishButton}
-        className={`inline-flex items-center justify-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
+        className={`inline-flex items-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover disabled:opacity-60 ${className ?? ""}`}
         disabled={publishing}
       >
-        {publishing && <Loading type="spin" height={16} width={16} />}
+        {publishing && <Loading type="spin" width={16} height={16} />}
         <span>{t('publish.title')}</span>
       </button>
     );
@@ -340,75 +272,54 @@ export function WritingPage({ id }: { id?: number }) {
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
-        <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
-          <FlatTabButton active={preview === 'edit'} onClick={() => setPreview('edit')}> {t("edit")} </FlatTabButton>
-          <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
-          <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
-          <div className="flex-grow" />
-          <UploadImageButton />
-          {uploading &&
-            <div className="flex flex-row items-center space-x-2">
-              <Loading type="spin" color="#FC466B" height={16} width={16} />
-              <span className="text-sm text-neutral-500">{t('uploading')}</span>
-            </div>
-          }
-        </FlatInset>
-        <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
-          <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
-            <div
-              className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
-              onDrop={(e) => {
-                e.preventDefault();
-                const editor = editorRef.current;
-                if (!editor) return;
-                for (let i = 0; i < e.dataTransfer.files.length; i++) {
-                  const selection = editor.getSelection();
-                  if (!selection) return;
-                  const file = e.dataTransfer.files[i];
-                  setUploading(true);
-                  void insertImage(file, selection, showAlert).finally(() => {
-                    setUploading(false);
-                  });
-                }
-              }}
-              onPaste={handlePaste}
-            >
-              <Input
-                id={id}
-                value={title}
-                setValue={setTitle}
-                placeholder={t("title")}
-                variant="flat"
-                className="text-base"
-              />
-              <Input
-                id={id}
-                value={summary}
-                setValue={setSummary}
-                placeholder={t("summary")}
-                variant="flat"
-              />
-              <Input
-                id={id}
-                value={alias}
-                setValue={setAlias}
-                placeholder={t("alias")}
-                variant="flat"
-              />
-              <Input
-                id={id}
-                value={tags}
-                setValue={setTags}
-                placeholder={t("tags")}
-                variant="flat"
-                className="lg:col-span-2"
-              />
-            </div>
+        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/10 items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
+            <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+              {id !== undefined ? t("update.title") : t("publish.title")}
+            </p>
           </div>
+          <PublishButton className="w-auto" />
         </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="lg:col-span-2">
+            <Input
+              id={id}
+              value={title}
+              setValue={setTitle}
+              placeholder={t("title")}
+              variant="flat"
+              className="text-base"
+            />
+          </div>
+          <Input
+            id={id}
+            value={summary}
+            setValue={setSummary}
+            placeholder={t("summary")}
+            variant="flat"
+          />
+          <Input
+            id={id}
+            value={alias}
+            setValue={setAlias}
+            placeholder={t("alias")}
+            variant="flat"
+          />
+          <Input
+            id={id}
+            value={tags}
+            setValue={setTags}
+            placeholder={t("tags")}
+            variant="flat"
+            className="lg:col-span-2"
+          />
+        </div>
+
         <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setDraft(!draft)}
           >
             <p>{t('visible.self_only')}</p>
@@ -420,7 +331,7 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setListed(!listed)}
           >
             <p>{t('listed')}</p>
@@ -432,7 +343,7 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setLoginRequired(!loginRequired)}
           >
             <p>仅登录可见</p>
@@ -444,10 +355,8 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           {isAdmin && (
-            <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent p-3 dark:border-white/10 xl:col-span-1">
-              <p className="mr-2 whitespace-nowrap">
-                {t('created_at')}
-              </p>
+            <FlatMetaRow className="gap-3 rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
+              <p className="mr-2 whitespace-nowrap">{t('created_at')}</p>
               <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
             </FlatMetaRow>
           )}
@@ -459,12 +368,10 @@ export function WritingPage({ id }: { id?: number }) {
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
-    const isPermissionDenied = pageError === "Permission denied" || pageError.includes("无权限");
-
+    const isPermissionDenied = pageError.includes("无权限");
     let title = pageError;
     let desc = "";
     let showLoginButton = false;
-
     if (isLoginRequired) {
       title = "请登录后查看";
       desc = "这篇文章仅登录用户可见";
@@ -476,16 +383,14 @@ export function WritingPage({ id }: { id?: number }) {
       title = "无权限编辑此文章";
       desc = "你没有权限编辑这篇文章";
     }
-
     return (
       <>
         <Helmet>
-          <title>{`${title} - ${siteName.name}`}</title>
+          <title>{`${title} - ${siteConfig.name}`}</title>
           <meta property="og:site_name" content={siteName} />
           <meta property="og:title" content={title} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
-          <meta property="og:url" content={document.URL} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-2xl bg-w p-8 text-center">
@@ -493,19 +398,9 @@ export function WritingPage({ id }: { id?: number }) {
             {desc && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{desc}</p>}
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
-                <button
-                  onClick={() => (window.location.href = "/login")}
-                  className="rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
-                >
-                  去登录
-                </button>
+                <button onClick={() => location.href = "/login"} className="rounded-xl bg-theme px-6 py-2 text-sm text-white">去登录</button>
               )}
-              <button
-                onClick={() => (window.location.href = "/")}
-                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
-              >
-                返回首页
-              </button>
+              <button onClick={() => location.href = "/"} className="rounded-xl bg-neutral-200 px-6 py-2 text-sm">返回首页</button>
             </div>
           </div>
         </div>
@@ -522,7 +417,6 @@ export function WritingPage({ id }: { id?: number }) {
         <meta property="og:title" content={t('writing')} />
         <meta property="og:image" content={siteConfig.avatar} />
         <meta property="og:type" content="article" />
-        <meta property="og:url" content={document.URL} />
       </Helmet>
       {!feedData ? (
         <div className="flex justify-center py-20">
@@ -530,7 +424,7 @@ export function WritingPage({ id }: { id?: number }) {
         </div>
       ) : (
         <div className="mt-2 flex flex-col gap-4 sm:gap-6">
-          {MetaInput({ className: "p-4 sm:p-5 md:p-6" })}
+          <MetaInput className="p-4 sm:p-5 md:p-6" />
           <FlatPanel className="overflow-hidden p-0">
             <MarkdownEditor content={content} setContent={setContent} height='680px' />
           </FlatPanel>
