@@ -213,6 +213,9 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
                 renderWhitespace: "none",
                 renderControlCharacters: false,
                 smoothScrolling: false,
+minimap: {
+    enabled: false
+  },
                 dragAndDrop: true,
               }}
             />
