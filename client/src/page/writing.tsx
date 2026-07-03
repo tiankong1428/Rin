@@ -1,18 +1,17 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import {useCallback, useContext, useEffect, useState} from "react";
 import { ProfileContext } from '../state/profile';
-import { Helmet } from "react-helmet";
-import { useTranslation } from "react-i18next";
+import {Helmet} from "react-helmet";
+import {useTranslation} from "react-i18next";
 import Loading from 'react-loading';
-import { FlatInset, FlatTabButton } from "@rin/ui";
-import { ShowAlertType, useAlert } from './dialog';
-import { Checkbox, Input } from "../components/input";
+import {ShowAlertType, useAlert} from '../components/dialog';
+import {Checkbox, Input} from "../components/input";
 import { DateTimeInput, FlatMetaRow, FlatPanel } from "@rin/ui";
 import { client } from "../app/runtime";
-import { Cache } from '../utils/cache';
-import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName } from "../utils/constants";
+import {Cache} from '../utils/cache';
+import {useSiteConfig} from "../hooks/useSiteConfig";
+import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
 
@@ -59,7 +58,7 @@ async function publish({
     onCompleted();
   }
   if (error) {
-    showAlert(error instanceof Error ? error.message : t("upload.failed"));
+    showAlert(typeof error === "string" ? error : t("upload.failed"));
   }
   if (data) {
     showAlert(t("publish.success"), () => {
@@ -114,7 +113,7 @@ async function update({
     onCompleted();
   }
   if (error) {
-    showAlert(error instanceof Error ? error.message : t("upload.failed"));
+    showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
       Cache.with(id).clear();
@@ -145,7 +144,7 @@ export function WritingPage({ id }: { id?: number }) {
 
   function publishButton() {
     if (publishing) return;
-    const tagsplit = tags.split("#").filter(tag => tag).map(tag => tag.trim());
+    const tagsplit = tags.split("#").filter(tag => tag.trim() !== "").map(tag => tag.trim());
     if (id !== undefined) {
       setPublishing(true)
       update({
@@ -163,8 +162,14 @@ export function WritingPage({ id }: { id?: number }) {
         showAlert
       });
     } else {
-      if (!title) return showAlert(t("title.empty"));
-      if (!content) return showAlert(t("content.empty"));
+      if (!title.trim()) {
+        showAlert(t("title.empty"));
+        return;
+      }
+      if (!content.trim()) {
+        showAlert(t("content.empty"));
+        return;
+      }
       setPublishing(true)
       publish({
         title,
@@ -182,6 +187,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
+  // 登录监听
   useEffect(() => {
     if (profile === undefined) return;
     if (profile === null) {
@@ -191,79 +197,96 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 页面挂载立刻请求文章，不再阻塞本地草稿渲染
+  // 拉取文章，移除profile阻塞，草稿优先渲染
   useEffect(() => {
     if (id) {
       client.feed.get(id).then(({ data, error }) => {
-        if (error) return setPageError(error.message);
+        if (error) {
+          setPageError(typeof error === "string" ? error : t("request.failed"));
+          return;
+        }
         if (data) setFeedData(data);
       });
     }
   }, [id]);
 
-  // 核心修复：本地草稿不被自动覆盖、服务器新版本弹窗正常弹出
+  // 草稿对比逻辑，删除未使用localDraftIsEmpty
   useEffect(() => {
-    if (!feedData || profile === undefined || profile === null) return;
+    if (!feedData) return;
+    if (profile === undefined) return;
+    if (profile === null) return;
+
     if (feedData.uid !== profile.id && !isAdmin) {
       setPageError("无权限编辑此文章");
       return;
     }
 
     const localModifiedAt = cache.getModifiedAt();
-    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
     const localTitle = cache.getRaw("title") ?? "";
     const localContent = cache.getRaw("content") ?? "";
-    const localDraftIsEmpty = !localTitle.trim() && !localContent.trim();
+    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-    // 优先级1：本地存在草稿 + 服务器更新 → 弹窗，由用户选择是否覆盖
-    if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
-      const useServer = confirm("检测到服务器上有更新的版本。\n\n点击「确定」：加载服务器最新版本\n点击「取消」：继续编辑本地草稿");
+    // 本地有草稿 + 服务器更新，弹窗
+    if (localModifiedAt !== null && serverUpdatedAt > localUpdatedAt) {
+      const useServer = confirm(
+        "检测到服务器上有更新的版本。\n\n" +
+        "点击「确定」：加载服务器最新版本\n" +
+        "点击「取消」：继续编辑本地草稿"
+      );
       if (useServer) {
-        setTitle(feedData.title ?? "");
-        setContent(feedData.content ?? "");
-        setAlias(feedData.alias ?? "");
-        setSummary(feedData.summary ?? "");
-        setTags((feedData.hashtags ?? []).map((item: { name: string }) => `#${item.name}`).join(" "));
+        if (feedData.title) setTitle(feedData.title);
+        if (feedData.content) setContent(feedData.content);
+        if (feedData.hashtags) {
+          setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+        }
+        if ((feedData as any).alias) setAlias((feedData as any).alias);
+        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
         cache.touchModifiedAt();
       }
       return;
     }
 
-    // 优先级2：完全无草稿（localModifiedAt=null）才加载服务器，有草稿一律保留
+    // 完全无草稿才加载服务器
     if (localModifiedAt === null) {
-      setTitle(feedData.title ?? "");
-      setContent(feedData.content ?? "");
-      setAlias(feedData.alias ?? "");
-      setSummary((feedData as any).summary ?? "");
-      setTags((feedData.hashtags ?? []).map((item: { name: string }) => `#${item.name}`).join(" "));
+      if (feedData.title) setTitle(feedData.title);
+      if (feedData.content) setContent(feedData.content);
+      if (feedData.hashtags) {
+        setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+      }
+      if ((feedData as any).alias) setAlias((feedData as any).alias);
+      if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
     }
 
-    // 后台只读状态同步，不覆盖用户编辑内容
+    // 后台基础状态同步
     setListed(!!feedData.listed);
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
   }, [feedData, profile]);
 
-  const debouncedUpdate = useCallback(_.debounce(() => {
-    mermaid.initialize({ startOnLoad: false, theme: "default" });
-    mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_default") })
-      .then(() => {
-        mermaid.initialize({ startOnLoad: false, theme: "dark" });
-        mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_dark") });
-      })
-  }, 100), []);
+  const debouncedUpdate = useCallback(
+    _.debounce(() => {
+      mermaid.initialize({ startOnLoad: false, theme: "default" });
+      mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_default") })
+        .then(() => {
+          mermaid.initialize({ startOnLoad: false, theme: "dark" });
+          mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_dark") });
+        })
+    }, 100),
+    []
+  );
+
   useEffect(() => debouncedUpdate(), [content, debouncedUpdate]);
 
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
         onClick={publishButton}
-        className={`inline-flex items-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover disabled:opacity-60 ${className ?? ""}`}
+        className={`inline-flex items-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
         disabled={publishing}
       >
-        {publishing && <Loading type="spin" width={16} height={16} />}
+        {publishing && <Loading type="spin" height={16} width={16} />}
         <span>{t('publish.title')}</span>
       </button>
     );
@@ -272,7 +295,7 @@ export function WritingPage({ id }: { id?: number }) {
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
-        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/10 items-start justify-between">
+        <div className="flex flex-row gap-4 border-b border-black/5 pb-5 dark:border-white/5 items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
             <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
@@ -319,7 +342,7 @@ export function WritingPage({ id }: { id?: number }) {
 
         <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
+            className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setDraft(!draft)}
           >
             <p>{t('visible.self_only')}</p>
@@ -331,7 +354,7 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
+            className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setListed(!listed)}
           >
             <p>{t('listed')}</p>
@@ -343,7 +366,7 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
+            className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setLoginRequired(!loginRequired)}
           >
             <p>仅登录可见</p>
@@ -355,7 +378,7 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </FlatMetaRow>
           {isAdmin && (
-            <FlatMetaRow className="gap-3 rounded-none border-0 px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
+            <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
               <p className="mr-2 whitespace-nowrap">{t('created_at')}</p>
               <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
             </FlatMetaRow>
@@ -369,9 +392,11 @@ export function WritingPage({ id }: { id?: number }) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
     const isPermissionDenied = pageError.includes("无权限");
+
     let title = pageError;
     let desc = "";
     let showLoginButton = false;
+
     if (isLoginRequired) {
       title = "请登录后查看";
       desc = "这篇文章仅登录用户可见";
@@ -383,6 +408,7 @@ export function WritingPage({ id }: { id?: number }) {
       title = "无权限编辑此文章";
       desc = "你没有权限编辑这篇文章";
     }
+
     return (
       <>
         <Helmet>
@@ -391,6 +417,7 @@ export function WritingPage({ id }: { id?: number }) {
           <meta property="og:title" content={title} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
+          <meta property="og:url" content={document.URL} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-2xl bg-w p-8 text-center">
@@ -398,9 +425,19 @@ export function WritingPage({ id }: { id?: number }) {
             {desc && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{desc}</p>}
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
-                <button onClick={() => location.href = "/login"} className="rounded-xl bg-theme px-6 py-2 text-sm text-white">去登录</button>
+                <button
+                  onClick={() => (window.location.href = "/login")}
+                  className="rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
+                >
+                  去登录
+                </button>
               )}
-              <button onClick={() => location.href = "/"} className="rounded-xl bg-neutral-200 px-6 py-2 text-sm">返回首页</button>
+              <button
+                onClick={() => (window.location.href = "/")}
+                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+              >
+                返回首页
+              </button>
             </div>
           </div>
         </div>
@@ -417,6 +454,7 @@ export function WritingPage({ id }: { id?: number }) {
         <meta property="og:title" content={t('writing')} />
         <meta property="og:image" content={siteConfig.avatar} />
         <meta property="og:type" content="article" />
+        <meta property="og:url" content={document.URL} />
       </Helmet>
       {!feedData ? (
         <div className="flex justify-center py-20">
