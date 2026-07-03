@@ -33,11 +33,13 @@ export function MarkdownEditor({
   const cleanupRef = useRef<(() => void) | null>(null);
   const vditorReadyRef = useRef(false);
 
-  // 清空内容（编辑器 + 外部状态）
+  // 清空内容（带确认）
   const handleClear = () => {
     if (!vditorReadyRef.current) return;
-    vditorRef.current?.setValue("");
-    setContent("");
+    if (window.confirm(t("confirmClear", "确认清空编辑器内容吗？"))) {
+      vditorRef.current?.setValue("");
+      setContent("");
+    }
   };
 
   // 初始化 Vditor
@@ -49,7 +51,7 @@ export function MarkdownEditor({
       try {
         const vditor = new Vditor(container, {
           height: parseInt(height),
-          mode: "ir",                 // 即时渲染模式
+          mode: "ir",
           placeholder,
           theme: colorMode === "dark" ? "dark" : "classic",
           toolbar: [
