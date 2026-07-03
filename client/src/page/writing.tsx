@@ -160,7 +160,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [initLock, cache, content]);
 
-  // ---------- 服务器版本复原 ----------
+  // ---------- 服务器版本复原（修复：延迟更新缓存时间戳） ----------
   function handleRestoreServer() {
     if (!feedData) return;
     const ok = confirm("确定将丢弃本地所有草稿，使用服务器最新内容？");
@@ -172,7 +172,10 @@ export function WritingPage({ id }: { id?: number }) {
     }
     if ((feedData as any).alias) setAlias((feedData as any).alias);
     if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-    cache.touchModifiedAt();
+    // 微任务延迟，等state写入缓存再更新修改时间
+    queueMicrotask(() => {
+      cache.touchModifiedAt();
+    });
   }
 
   // ---------- 发布按钮逻辑 ----------
@@ -231,7 +234,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // ---------- 拉取文章数据 ----------
+  // ---------- 拉取文章数据（修复：拿到数据后主动回填表单） ----------
   useEffect(() => {
     if (id) {
       client.feed.get(id).then(({ data, error }) => {
@@ -239,12 +242,26 @@ export function WritingPage({ id }: { id?: number }) {
           setPageError(typeof error === "string" ? error : t("request.failed"));
           return;
         }
-        if (data) setFeedData(data);
+        if (data) {
+          setFeedData(data);
+          // 本地无草稿，直接填充服务器数据，解决首次进入空白
+          const localModifiedAt = cache.getModifiedAt();
+          if (localModifiedAt === null) {
+            if (data.title) setTitle(data.title);
+            if (data.content) setContent(data.content);
+            if (data.hashtags) {
+              setTags(data.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+            }
+            if ((data as any).alias) setAlias((data as any).alias);
+            if ((data as any).summary) setSummary((data as any).summary || "");
+            cache.touchModifiedAt();
+          }
+        }
       });
     }
-  }, [id]);
+  }, [id, cache, t]);
 
-  // ---------- 草稿对比 / 服务器数据覆盖逻辑（修复后） ----------
+  // ---------- 草稿对比 / 服务器数据覆盖逻辑 ----------
   useEffect(() => {
     // 必须同时满足：服务器数据已加载、initLock 已解除、缓存已就绪
     if (!feedData || initLock || !cacheReady) return;
@@ -295,7 +312,7 @@ export function WritingPage({ id }: { id?: number }) {
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile, initLock, cacheReady]); // 关键依赖
+  }, [feedData, profile, initLock, cacheReady]);
 
   // ---------- mermaid 渲染 ----------
   const debouncedUpdate = useCallback(
