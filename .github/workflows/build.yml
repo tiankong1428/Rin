@@ -56,11 +56,10 @@ jobs:
       - name: Build client
         run: |
           cd client
-          bun install
-          echo "=== list node_modules/vditor ==="
-          ls -la node_modules/vditor
-          echo "=== list node_modules/vditor/dist ==="
-          ls -la node_modules/vditor/dist || echo "dist folder NOT exists"
+          echo "=== list root node_modules/vditor ==="
+          ls -la ../node_modules/vditor
+          echo "=== list root node_modules/vditor/dist ==="
+          ls -la ../node_modules/vditor/dist || echo "dist folder NOT exists"
           bun run build
           cd ..
 
