@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
       outDir: '../dist/client',
       emptyOutDir: true,
     },
+base: "./",
     plugins: [
       react(),
       // Only open visualizer in build mode
