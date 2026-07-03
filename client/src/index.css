@@ -210,3 +210,13 @@ a.toc-link {
 .is-active-link::before {
   @apply bg-theme;
 }
+
+/* Vditor 预览有序/无序列表序号修复 */
+.vditor-preview ol {
+  padding-left: 2em !important;
+  list-style: decimal outside !important;
+}
+.vditor-preview ul {
+  padding-left: 2em !important;
+  list-style: disc outside !important;
+}
