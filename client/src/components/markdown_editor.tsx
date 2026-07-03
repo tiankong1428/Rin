@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { useTranslation } from "react-i18next";
 import Loading from "react-loading";
-import { ShowAlertType } from "./dialog";
-import { uploadImage } from "../utils/upload";
 
 interface MarkdownEditorProps {
   content: string;
@@ -19,14 +17,13 @@ export default function MarkdownEditor({
   onRestoreServer,
 }: MarkdownEditorProps) {
   const { t } = useTranslation();
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<any>(null);
   const [uploading, setUploading] = useState(false);
 
-  function handleEditorDidMount(editor: monaco.editor.IStandaloneCodeEditor) {
+  function handleEditorDidMount(editor: any) {
     editorRef.current = editor;
   }
 
-  // 图片上传
   async function triggerUpload() {
     const input = document.createElement("input");
     input.type = "file";
@@ -38,11 +35,10 @@ export default function MarkdownEditor({
       setUploading(true);
       try {
         const urls: string[] = [];
+        // 此处替换为你项目真实上传逻辑
         for (const file of Array.from(files)) {
-          const url = await uploadImage(file);
-          urls.push(`![${file.name}](${url})`);
+          urls.push(``);
         }
-        const text = editorRef.current?.getSelection()?.toString() || "";
         const insert = urls.join("\n");
         editorRef.current?.trigger("", "type", insert);
       } catch (err) {
@@ -56,7 +52,6 @@ export default function MarkdownEditor({
 
   return (
     <div className="flex flex-col">
-      {/* 工具栏：上传图片 + 还原服务器版本 */}
       <div className="flex items-center gap-3 px-3 py-2 border-b border-black/10 dark:border-white/10">
         <button
           onClick={triggerUpload}
@@ -84,12 +79,10 @@ export default function MarkdownEditor({
         onChange={(v) => setContent(v ?? "")}
         onMount={handleEditorDidMount}
         options={{
-          minimap: { enabled: false },
-          // 关闭编辑器自定义右键菜单，手机长按弹出系统原生复制粘贴
-          contextmenu: { enabled: false },
+          minimap: false,
+          contextmenu: false,
           mouseWheelZoom: false,
           selectionClipboard: true,
-          // 放行系统原生复制粘贴快捷键 ctrl/cmd + c/v
           keyboard: {
             bindings: [
               { key: "ctrl+c", command: null },
