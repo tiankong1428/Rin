@@ -128,30 +128,28 @@ export function MarkdownEditor({
   }
 
   const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
-  editorRef.current = editor;
+    editorRef.current = editor;
 
-  // 阻止编辑器内置右键，改用 stop() 兼容旧版类型
-  editor.onContextMenu(e => e.stop());
+    editor.onDidCompositionStart(() => {
+      isComposingRef.current = true;
+    });
 
-  editor.onDidCompositionStart(() => {
-    isComposingRef.current = true;
-  });
-
-  editor.onDidCompositionEnd(() => {
-    isComposingRef.current = false;
-    setContent(editor.getValue());
-  });
-
-  editor.onDidChangeModelContent(() => {
-    if (!isComposingRef.current) {
+    editor.onDidCompositionEnd(() => {
+      isComposingRef.current = false;
       setContent(editor.getValue());
-    }
-  });
+    });
 
-  editor.onDidBlurEditorText(() => {
-    setContent(editor.getValue());
-  });
-};
+    editor.onDidChangeModelContent(() => {
+      if (!isComposingRef.current) {
+        setContent(editor.getValue());
+      }
+    });
+
+    editor.onDidBlurEditorText(() => {
+      setContent(editor.getValue());
+    });
+  };
+
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -173,7 +171,6 @@ export function MarkdownEditor({
         <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
         <div className="flex-grow" />
         <UploadImageButton />
-        {/* 复原按钮：中文文字，无二次确认弹窗 */}
         {onRestoreServer && (
           <button
             onClick={onRestoreServer}
@@ -232,8 +229,8 @@ export function MarkdownEditor({
                 minimap: {
                   enabled: false
                 },
-                dragAndDrop: true
-                // 移除不存在的 keyboard 配置，不全局关闭contextmenu
+                dragAndDrop: true,
+                contextmenu: false
               }}
             />
           </div>
