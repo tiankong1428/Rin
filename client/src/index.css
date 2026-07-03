@@ -211,12 +211,33 @@ a.toc-link {
   @apply bg-theme;
 }
 
-/* Vditor 预览有序/无序列表序号修复 */
+
+/* 分屏预览 */
 .vditor-preview ol {
   padding-left: 2em !important;
   list-style: decimal outside !important;
 }
 .vditor-preview ul {
+  padding-left: 2em !important;
+  list-style: disc outside !important;
+}
+
+/* 即时渲染 IR 模式 */
+.vditor-ir ol {
+  padding-left: 2em !important;
+  list-style: decimal outside !important;
+}
+.vditor-ir ul {
+  padding-left: 2em !important;
+  list-style: disc outside !important;
+}
+
+/* 所见即所得 WYSIWYG 富文本模式 */
+.vditor-wysiwyg ol {
+  padding-left: 2em !important;
+  list-style: decimal outside !important;
+}
+.vditor-wysiwyg ul {
   padding-left: 2em !important;
   list-style: disc outside !important;
 }
