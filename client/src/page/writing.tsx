@@ -240,39 +240,34 @@ export function WritingPage({ id }: { id?: number }) {
   }, [id, cache, t]);
 
   // ---------- 草稿对比弹窗逻辑（新增：发布中直接跳过，避免弹窗提前弹出） ----------
-  useEffect(() => {
-    // 新建文章无id直接跳过
-    if (!id) return;
-    // 发布中、无服务器数据、锁未解锁、缓存未就绪直接跳过
-    if (!feedData || initLock || !cacheReady || publishing) return;
-    if (profile === undefined || profile === null) return;
+  // ---------- 草稿对比 / 服务器数据覆盖逻辑 ----------
+useEffect(() => {
+  // 新建文章无id直接跳过
+  if (!id) return;
+  // 发布中、无服务器数据、锁未解锁、缓存未就绪直接跳过
+  if (!feedData || initLock || !cacheReady || publishing) return;
+  if (profile === undefined || profile === null) return;
 
-    if (feedData.uid !== profile.id && !isAdmin) {
-      setPageError("无权限编辑此文章");
-      return;
-    }
+  if (feedData.uid !== profile.id && !isAdmin) {
+    setPageError("无权限编辑此文章");
+    return;
+  }
 
-    const localModifiedAt = cache.getModifiedAt();
-    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+  const localModifiedAt = cache.getModifiedAt();
+  // ========== 新增这一行 ==========
+  // 本地草稿已清空（发布完成），直接退出，不做任何对比弹窗
+  if (localModifiedAt === null) return;
 
-    if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
-      const useServer = confirm(
-        "检测到服务器上有更新的版本。\n\n" +
-        "点击「确定」：加载服务器最新版本\n" +
-        "点击「取消」：继续编辑本地草稿"
-      );
-      if (useServer) {
-        if (feedData.title) setTitle(feedData.title);
-        if (feedData.content) setContent(feedData.content);
-        if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-        if ((feedData as any).alias) setAlias((feedData as any).alias);
-        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-        cache.touchModifiedAt();
-      }
-      return;
-    }
+  const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-    if (localModifiedAt === null) {
+  // 本地有草稿，且服务器更新时间更新，才弹确认框
+  if (serverUpdatedAt > localModifiedAt) {
+    const useServer = confirm(
+      "检测到服务器上有更新的版本。\n\n" +
+      "点击「确定」：加载服务器最新版本\n" +
+      "点击「取消」：继续编辑本地草稿"
+    );
+    if (useServer) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
@@ -280,12 +275,15 @@ export function WritingPage({ id }: { id?: number }) {
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
     }
+    return;
+  }
 
-    setListed(!!feedData.listed);
-    setDraft(!!feedData.draft);
-    setLoginRequired(!!feedData.loginRequired);
-    if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile, initLock, cacheReady, id, publishing]);
+  // 本地有草稿且服务器无更新，直接同步基础状态，不覆盖内容
+  setListed(!!feedData.listed);
+  setDraft(!!feedData.draft);
+  setLoginRequired(!!feedData.loginRequired);
+  if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
+}, [feedData, profile, initLock, cacheReady, id, publishing]);
 
   // mermaid 渲染防抖
   const debouncedUpdate = useCallback(
