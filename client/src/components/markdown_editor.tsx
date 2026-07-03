@@ -6,6 +6,7 @@ import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 import Vditor from "vditor";
+import "vditor/dist/index.css";
 
 interface MarkdownEditorProps {
   content: string;
