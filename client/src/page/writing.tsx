@@ -1,21 +1,21 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import {useCallback, useContext, useEffect, useState} from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { ProfileContext } from '../state/profile';
-import {Helmet} from "react-helmet";
-import {useTranslation} from "react-i18next";
+import { Helmet } from "react-helmet";
+import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
-import {ShowAlertType, useAlert} from '../components/dialog';
-import {Checkbox, Input} from "../components/input";
+import { ShowAlertType, useAlert } from '../components/dialog';
+import { Checkbox, Input } from "../components/input";
 import { DateTimeInput, FlatMetaRow, FlatPanel } from "@rin/ui";
 import { client } from "../app/runtime";
-import {Cache} from '../utils/cache';
-import {useSiteConfig} from "../hooks/useSiteConfig";
-import {siteName} from "../utils/constants";
+import { Cache } from '../utils/cache';
+import { useSiteConfig } from "../hooks/useSiteConfig";
+import { siteName } from "../utils/constants";
 import mermaid from 'mermaid';
-// 正确（本文件是命名导出，不是默认导出）
 import { MarkdownEditor } from '../components/markdown_editor';
 
+// ---------- 发布 / 更新逻辑（保持不变） ----------
 async function publish({
   title,
   alias,
@@ -42,22 +42,18 @@ async function publish({
   showAlert: ShowAlertType;
 }) {
   const t = i18n.t
-  const { data, error } = await client.feed.create(
-    {
-      title,
-      alias,
-      content,
-      summary,
-      tags,
-      listed,
-      draft,
-      loginRequired,
-      createdAt: createdAt?.toISOString(),
-    }
-  );
-  if (onCompleted) {
-    onCompleted();
-  }
+  const { data, error } = await client.feed.create({
+    title,
+    alias,
+    content,
+    summary,
+    tags,
+    listed,
+    draft,
+    loginRequired,
+    createdAt: createdAt?.toISOString(),
+  });
+  if (onCompleted) onCompleted();
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   }
@@ -97,23 +93,18 @@ async function update({
   showAlert: ShowAlertType;
 }) {
   const t = i18n.t
-  const { error } = await client.feed.update(
-    id,
-    {
-      title,
-      alias,
-      content,
-      summary,
-      tags,
-      listed,
-      draft,
-      loginRequired,
-      createdAt: createdAt?.toISOString(),
-    }
-  );
-  if (onCompleted) {
-    onCompleted();
-  }
+  const { error } = await client.feed.update(id, {
+    title,
+    alias,
+    content,
+    summary,
+    tags,
+    listed,
+    draft,
+    loginRequired,
+    createdAt: createdAt?.toISOString(),
+  });
+  if (onCompleted) onCompleted();
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
@@ -124,6 +115,7 @@ async function update({
   }
 }
 
+// ---------- 主组件 ----------
 export function WritingPage({ id }: { id?: number }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -139,14 +131,36 @@ export function WritingPage({ id }: { id?: number }) {
   const [pageError, setPageError] = useState<string | null>(null);
   const [feedData, setFeedData] = useState<any>(null);
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
-  const [publishing, setPublishing] = useState(false)
+  const [publishing, setPublishing] = useState(false);
   const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
-  // 新增初始化锁，解决浏览器时序差异导致直接覆盖草稿
-  const [initLock, setInitLock] = useState(true);
 
-  // 还原服务器版本，一键覆盖本地草稿
+  // ---------- 新增：缓存就绪标志，防止服务器数据过早覆盖本地草稿 ----------
+  const [initLock, setInitLock] = useState(true);
+  const [cacheReady, setCacheReady] = useState(false);
+
+  // 解锁 initLock（延迟 300ms，让缓存 hook 优先完成状态设置）
+  useEffect(() => {
+    const timer = setTimeout(() => setInitLock(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 当 initLock 解锁后，确认缓存已读取完成
+  useEffect(() => {
+    if (!initLock) {
+      // 只要有修改时间戳，或者内容非空（说明缓存已存在），即认为缓存就绪
+      const modifiedAt = cache.getModifiedAt();
+      if (modifiedAt !== null || content !== "") {
+        setCacheReady(true);
+      } else {
+        // 新文章，无缓存，也视为就绪
+        setCacheReady(true);
+      }
+    }
+  }, [initLock, cache, content]);
+
+  // ---------- 服务器版本复原 ----------
   function handleRestoreServer() {
     if (!feedData) return;
     const ok = confirm("确定将丢弃本地所有草稿，使用服务器最新内容？");
@@ -161,11 +175,12 @@ export function WritingPage({ id }: { id?: number }) {
     cache.touchModifiedAt();
   }
 
+  // ---------- 发布按钮逻辑 ----------
   function publishButton() {
     if (publishing) return;
     const tagsplit = tags.split("#").filter(tag => tag.trim() !== "").map(tag => tag.trim());
     if (id !== undefined) {
-      setPublishing(true)
+      setPublishing(true);
       update({
         id,
         listed,
@@ -189,7 +204,7 @@ export function WritingPage({ id }: { id?: number }) {
         showAlert(t("content.empty"));
         return;
       }
-      setPublishing(true)
+      setPublishing(true);
       publish({
         title,
         content,
@@ -206,13 +221,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
-  // 初始化300ms解锁，保证草稿优先渲染
-  useEffect(() => {
-    const timer = setTimeout(() => setInitLock(false), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // 登录监听
+  // ---------- 登录检测 ----------
   useEffect(() => {
     if (profile === undefined) return;
     if (profile === null) {
@@ -222,7 +231,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章
+  // ---------- 拉取文章数据 ----------
   useEffect(() => {
     if (id) {
       client.feed.get(id).then(({ data, error }) => {
@@ -235,9 +244,10 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [id]);
 
-  // 草稿对比逻辑，加initLock锁，浏览器不会直接覆盖草稿
+  // ---------- 草稿对比 / 服务器数据覆盖逻辑（修复后） ----------
   useEffect(() => {
-    if (!feedData || initLock) return;
+    // 必须同时满足：服务器数据已加载、initLock 已解除、缓存已就绪
+    if (!feedData || initLock || !cacheReady) return;
     if (profile === undefined) return;
     if (profile === null) return;
 
@@ -285,8 +295,9 @@ export function WritingPage({ id }: { id?: number }) {
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile, initLock]);
+  }, [feedData, profile, initLock, cacheReady]); // 关键依赖
 
+  // ---------- mermaid 渲染 ----------
   const debouncedUpdate = useCallback(
     _.debounce(() => {
       mermaid.initialize({ startOnLoad: false, theme: "default" });
@@ -301,6 +312,7 @@ export function WritingPage({ id }: { id?: number }) {
 
   useEffect(() => debouncedUpdate(), [content, debouncedUpdate]);
 
+  // ---------- UI 子组件 ----------
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
@@ -410,6 +422,7 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
+  // ---------- 错误页面渲染 ----------
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -468,6 +481,7 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
+  // ---------- 正常页面渲染 ----------
   return (
     <>
       <Helmet>
