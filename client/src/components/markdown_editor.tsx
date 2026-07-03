@@ -18,7 +18,7 @@ interface MarkdownEditorProps {
 export function MarkdownEditor({
   content,
   setContent,
-  placeholder = "> Write your content here...",
+  placeholder = "> 在这里输入你的内容",
   height = "400px",
   onRestoreServer,
 }: MarkdownEditorProps) {
