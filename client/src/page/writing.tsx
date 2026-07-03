@@ -123,7 +123,6 @@ async function update({
   }
 }
 
-// 写作页面
 export function WritingPage({ id }: { id?: number }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -197,7 +196,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
-  // 登录状态监听：区分加载中/未登录/已登录，不再瞬间报错卡住页面
+  // 登录状态监听
   useEffect(() => {
     if (profile === undefined) return;
     if (profile === null) {
@@ -207,9 +206,8 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章：等待profile加载完成再请求，避免feedData提前就绪时序错乱、永久loading
+  // 拉取文章：移除profile等待，避免草稿延迟覆盖
   useEffect(() => {
-    if (profile === undefined) return;
     if (id) {
       client.feed
         .get(id)
@@ -223,33 +221,46 @@ export function WritingPage({ id }: { id?: number }) {
           }
         });
     }
-  }, [id, profile]);
+  }, [id]);
 
-  // 填充表单+权限校验，修复空草稿、profile延迟导致不渲染内容
+  // 填充表单，修复草稿被覆盖、服务器更新弹窗
   useEffect(() => {
-  if (!feedData) return;
-  if (profile === undefined) return;
-  if (profile === null) return;
+    if (!feedData) return;
+    if (profile === undefined) return;
+    if (profile === null) return;
 
-  if (feedData.uid !== profile.id && !isAdmin) {
-    setPageError("无权限编辑此文章");
-    return;
-  }
+    if (feedData.uid !== profile.id && !isAdmin) {
+      setPageError("无权限编辑此文章");
+      return;
+    }
 
-  const localModifiedAt = cache.getModifiedAt();
-  const localTitle = cache.getRaw("title");
-  const localContent = cache.getRaw("content");
-  const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
-  const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
+    const localModifiedAt = cache.getModifiedAt();
+    const localTitle = cache.getRaw("title");
+    const localContent = cache.getRaw("content");
+    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-  // 优先判断服务器更新，正常弹出确认弹窗
-  if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
-    const useServer = confirm(
-      "检测到服务器上有更新的版本。\n\n" +
-      "点击「确定」：加载服务器最新版本\n" +
-      "点击「取消」：继续编辑本地草稿"
-    );
-    if (useServer) {
+    // 本地有草稿且服务器更新，弹出选择，不自动覆盖草稿
+    if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
+      const useServer = confirm(
+        "检测到服务器上有更新的版本。\n\n" +
+        "点击「确定」：加载服务器最新版本\n" +
+        "点击「取消」：继续编辑本地草稿"
+      );
+      if (useServer) {
+        if (feedData.title) setTitle(feedData.title);
+        if (feedData.content) setContent(feedData.content);
+        if (feedData.hashtags) {
+          setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+        }
+        if ((feedData as any).alias) setAlias((feedData as any).alias);
+        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+        cache.touchModifiedAt();
+      }
+      return;
+    }
+
+    // 完全无本地草稿才加载服务器内容
+    if (localModifiedAt === null) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
@@ -259,23 +270,13 @@ export function WritingPage({ id }: { id?: number }) {
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
     }
-  } else if (localModifiedAt === null || localDraftIsEmpty) {
-    // 无草稿/草稿空白，直接读取服务器不弹窗
-    if (feedData.title) setTitle(feedData.title);
-    if (feedData.content) setContent(feedData.content);
-    if (feedData.hashtags) {
-      setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
-    }
-    if ((feedData as any).alias) setAlias((feedData as any).alias);
-    if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-    cache.touchModifiedAt();
-  }
 
-  setListed((feedData as any).listed === 1);
-  setDraft((feedData as any).draft === 1);
-  setLoginRequired((feedData as any).loginRequired === 1);
-  setCreatedAt(new Date(feedData.createdAt));
-}, [feedData, profile]);
+    // 固定后台字段，不受草稿影响
+    setListed((feedData as any).listed === 1);
+    setDraft((feedData as any).draft === 1);
+    setLoginRequired((feedData as any).loginRequired === 1);
+    setCreatedAt(new Date(feedData.createdAt));
+  }, [feedData, profile]);
 
   const debouncedUpdate = useCallback(
     _.debounce(() => {
@@ -308,7 +309,7 @@ export function WritingPage({ id }: { id?: number }) {
     return (
       <button
         onClick={publishButton}
-        className={`inline-flex items-center justify-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
+        className={`inline-flex items-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
         disabled={publishing}
       >
         {publishing && <Loading type="spin" height={16} width={16} />}
@@ -319,103 +320,76 @@ export function WritingPage({ id }: { id?: number }) {
 
   function MetaInput({ className }: { className?: string }) {
     return (
-        <FlatPanel className={className}>
-          <div className="flex flex-row gap-4 border-b border-black/5 pb-5 dark:border-white/5 items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
-              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-                {id !== undefined ? t("update.title") : t("publish.title")}
-              </p>
-            </div>
-            <PublishButton className="w-auto" />
+      <FlatPanel className={className}>
+        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/5 items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
+            <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+              {id !== undefined ? t("update.title") : t("publish.title")}
+            </p>
           </div>
+          <PublishButton className="w-auto" />
+        </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
-            <div className="lg:col-span-2">
-              <Input
-                id={id}
-                value={title}
-                setValue={setTitle}
-                placeholder={t("title")}
-                variant="flat"
-                className="text-base"
-              />
-            </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="lg:col-span-2">
             <Input
               id={id}
-              value={summary}
-              setValue={setSummary}
-              placeholder={t("summary")}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("title")}
               variant="flat"
-            />
-            <Input
-              id={id}
-              value={alias}
-              setValue={setAlias}
-              placeholder={t("alias")}
-              variant="flat"
-            />
-            <Input
-              id={id}
-              value={tags}
-              setValue={setTags}
-              placeholder={t("tags")}
-              variant="flat"
-              className="lg:col-span-2"
+              className="text-base"
             />
           </div>
+          <Input
+            id={id}
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder={t("summary")}
+            variant="flat"
+          />
+          <Input
+            id={id}
+            value={alias}
+            onChange={(e) => setAlias(e.target.value)}
+            placeholder={t("alias")}
+            variant="flat"
+          />
+          <Input
+            id={id}
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder={t("tags")}
+            variant="flat"
+            className="lg:col-span-2"
+          />
+        </div>
 
-          <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
-            <FlatMetaRow
-              className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
-              onClick={() => setDraft(!draft)}
-            >
-              <p>{t('visible.self_only')}</p>
-              <Checkbox
-                id="draft"
-                value={draft}
-                setValue={setDraft}
-                placeholder={t('draft')}
-              />
+        <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_1fr_2fr]">
+          <FlatMetaRow onClick={() => setDraft(!draft)} className="cursor-pointer">
+            <p>{t('visible.self_only')}</p>
+            <Checkbox value={draft} onChange={setDraft} />
+          </FlatMetaRow>
+          <FlatMetaRow onClick={() => setListed(!listed)} className="cursor-pointer">
+            <p>{t('listed')}</p>
+            <Checkbox value={listed} onChange={setListed} />
+          </FlatMetaRow>
+          <FlatMetaRow onClick={() => setLoginRequired(!loginRequired)} className="cursor-pointer">
+            <p>仅登录可见</p>
+            <Checkbox value={loginRequired} onChange={setLoginRequired} />
+          </FlatMetaRow>
+          {isAdmin && (
+            <FlatMetaRow className="xl:col-span-1">
+              <span className="mr-2 whitespace-nowrap">{t('created_at')}</span>
+              <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[240px]" />
             </FlatMetaRow>
-            <FlatMetaRow
-              className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
-              onClick={() => setListed(!listed)}
-            >
-              <p>{t('listed')}</p>
-              <Checkbox
-                id="listed"
-                value={listed}
-                setValue={setListed}
-                placeholder={t('listed')}
-              />
-            </FlatMetaRow>
-            <FlatMetaRow
-              className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
-              onClick={() => setLoginRequired(!loginRequired)}
-            >
-              <p>仅登录可见</p>
-              <Checkbox
-                id="loginRequired"
-                value={loginRequired}
-                setValue={setLoginRequired}
-                placeholder="仅登录可见"
-              />
-            </FlatMetaRow>
-            {isAdmin && (
-              <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
-                <p className="mr-2 whitespace-nowrap">
-                  {t('created_at')}
-                </p>
-                <DateTimeInput value={createdAt} onChange={setCreatedAt} className="w-full max-w-[16rem]" />
-              </FlatMetaRow>
-            )}
-          </div>
-        </FlatPanel>
+          )}
+        </div>
+      </FlatPanel>
     )
   }
 
-  // 错误页面分支
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -440,29 +414,29 @@ export function WritingPage({ id }: { id?: number }) {
     return (
       <>
         <Helmet>
-          <title>{`${title} - ${siteConfig.name}`}</title>
+          <title>{`${title} - ${siteName}`}</title>
           <meta property="og:site_name" content={siteName} />
           <meta property="og:title" content={title} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
-          <meta property="og:url" content={document.URL} />
+          <meta property="og:url" content={location.href} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
-          <div className="rounded-2xl bg-w p-8 text-center">
-            <h1 className="text-2xl font-bold t-primary">{title}</h1>
+          <div className="rounded-2xl bg-white dark:bg-neutral-800 p-8 text-center">
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{title}</h1>
             {desc && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{desc}</p>}
             <div className="mt-6 flex gap-3 justify-center">
               {showLoginButton && (
                 <button
-                  onClick={() => (window.location.href = "/login")}
-                  className="rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
+                  onClick={() => window.location.href = "/login"}
+                  className="rounded-xl bg-theme px-6 py-2 text-sm text-white hover:bg-theme-hover"
                 >
                   去登录
                 </button>
               )}
               <button
-                onClick={() => (window.location.href = "/")}
-                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+                onClick={() => window.location.href = "/"}
+                className="rounded-xl bg-neutral-200 dark:bg-neutral-700 px-6 py-2 text-sm text-neutral-800 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-600"
               >
                 返回首页
               </button>
@@ -474,23 +448,22 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // 无文章数据时展示加载，有数据直接渲染表单
   return (
     <>
       <Helmet>
-        <title>{`${t('writing')} - ${siteConfig.name}`}</title>
+        <title>{`${t('writing')} - ${siteName}`}</title>
         <meta property="og:site_name" content={siteName} />
         <meta property="og:title" content={t('writing')} />
         <meta property="og:image" content={siteConfig.avatar} />
         <meta property="og:type" content="article" />
-        <meta property="og:url" content={document.URL} />
+        <meta property="og:url" content={location.href} />
       </Helmet>
       {!feedData ? (
         <div className="flex justify-center py-20">
           <Loading type="spin" height={40} width={40} />
         </div>
       ) : (
-        <div className="mt-2 flex flex-col gap-4 t-primary sm:gap-6">
+        <div className="mt-2 flex flex-col gap-4 sm:gap-6">
           {MetaInput({ className: "p-4 sm:p-5 md:p-6" })}
           <FlatPanel className="overflow-hidden p-0">
             <MarkdownEditor content={content} setContent={setContent} height='680px' />
