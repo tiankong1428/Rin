@@ -57,7 +57,9 @@ export class Cache {
         const timeStr = this.get("modifiedAt" as Keys);
         return timeStr ? parseInt(timeStr, 10) : null;
     }
-
+getRaw(key: string) {
+  return localStorage.getItem(this.getKey(key));
+}
     // 更新本地草稿的修改时间为当前时间
     public touchModifiedAt() {
         this.set("modifiedAt" as Keys, Date.now().toString());
