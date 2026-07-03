@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react-swc'
 import { visualizer } from "rollup-plugin-visualizer";
 import copy from "rollup-plugin-copy";
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isDev = mode === 'development';
   const serverPort = Number(process.env.RIN_SERVER_PORT || "11499");
@@ -11,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const cacheDir = process.env.RIN_VITE_CACHE_DIR || "../.vite/client";
   
   return {
-    base: "./", // 新增：资源使用相对路径，Cloudflare 不会404
+    base: "./",
     cacheDir,
     build: {
       outDir: '../dist/client',
@@ -20,7 +19,6 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       visualizer({ open: !isDev }),
-      // 新增：复制vditor完整静态资源到打包产物
       copy({
         hook: "writeBundle",
         targets: [
