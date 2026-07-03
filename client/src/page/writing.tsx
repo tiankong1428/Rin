@@ -89,6 +89,7 @@ async function update({
   content?: string;
   summary?: string;
   tags?: string[];
+  listed?: boolean;
   draft?: boolean;
   loginRequired?: boolean;
   createdAt?: Date;
@@ -332,7 +333,6 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
             <Input
-              id={String(id)}
               value={title}
               setValue={setTitle}
               placeholder={t("title")}
@@ -341,21 +341,18 @@ export function WritingPage({ id }: { id?: number }) {
             />
           </div>
           <Input
-            id={String(id)}
             value={summary}
             setValue={setSummary}
             placeholder={t("summary")}
             variant="flat"
           />
           <Input
-            id={String(id)}
             value={alias}
             setValue={setAlias}
             placeholder={t("alias")}
             variant="flat"
           />
           <Input
-            id={String(id)}
             value={tags}
             setValue={setTags}
             placeholder={t("tags")}
@@ -371,7 +368,6 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>{t('visible.self_only')}</p>
             <Checkbox
-              id={String(id)}
               value={draft}
               setValue={setDraft}
               placeholder={t('draft')}
@@ -383,7 +379,6 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>{t('listed')}</p>
             <Checkbox
-              id={String(id)}
               value={listed}
               setValue={setListed}
               placeholder={t('listed')}
@@ -395,7 +390,6 @@ export function WritingPage({ id }: { id?: number }) {
           >
             <p>仅登录可见</p>
             <Checkbox
-              id={String(id)}
               value={loginRequired}
               setValue={setLoginRequired}
               placeholder="仅登录可见"
@@ -473,7 +467,7 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // 无文章数据显示Loading，有数据直接渲染表单
+  // 无文章数据显示加载，有数据直接渲染表单
   return (
     <>
       <Helmet>
