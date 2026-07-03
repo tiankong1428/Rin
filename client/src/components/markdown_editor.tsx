@@ -30,7 +30,6 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
-  // 粘贴图片上传函数
   const uploadFile = async (files: File[]) => {
     setUploading(true);
     const insertTexts: string[] = [];
@@ -67,7 +66,7 @@ export function MarkdownEditor({
       cache: false,
       value: content,
       input: (val) => setContent(val),
-      // 完全删除 upload 配置，不再触发类型报错
+      // 完全移除upload配置，杜绝TS2559报错
       toolbar: [
         "emoji",
         "headings",
@@ -94,22 +93,24 @@ export function MarkdownEditor({
 
     vditorRef.current = vditor;
 
-    // 监听粘贴事件，手动处理图片上传
-    vditor.dom.addEventListener("paste", async (e) => {
-      const files = Array.from(e.clipboardData?.files || []);
-      if (files.length) {
+    // 修复：vditor.element 替代不存在的 dom
+    const editorDom = vditor.element;
+    const pasteHandler = async (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.files ?? []) as File[];
+      if (items.length) {
         e.preventDefault();
-        await uploadFile(files);
+        await uploadFile(items);
       }
-    });
+    };
+    editorDom.addEventListener("paste", pasteHandler);
 
     return () => {
+      editorDom.removeEventListener("paste", pasteHandler);
       vditor.destroy();
       vditorRef.current = null;
     };
   }, []);
 
-  // 外部内容同步
   useEffect(() => {
     if (!vditorRef.current) return;
     if (vditorRef.current.getValue() !== content) {
