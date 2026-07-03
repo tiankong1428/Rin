@@ -53,9 +53,13 @@ jobs:
 
       # Build client (no env vars needed, config is fetched from server at runtime)
       # Note: vite.config.ts builds directly to ../dist/client
-      - name: Build client
+            - name: Build client
         run: |
           cd client
+          echo "=== list node_modules/vditor ==="
+          ls -la node_modules/vditor
+          echo "=== list node_modules/vditor/dist ==="
+          ls -la node_modules/vditor/dist || echo "dist folder NOT exists"
           bun run build
           cd ..
 
