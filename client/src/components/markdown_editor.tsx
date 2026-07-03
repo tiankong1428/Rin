@@ -51,26 +51,28 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
 
   const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
     const clipboardData = event.clipboardData;
-    if (clipboardData.files.length === 1) {
-      const editor = editorRef.current;
-      if (!editor) return;
-      editor.trigger(undefined, "undo", undefined);
-      setUploading(true);
-      const myfile = clipboardData.files[0] as File;
-      const selection = editor.getSelection();
-      if (!selection) {
-        setUploading(false);
-        return;
-      }
-      void insertImage(myfile, selection, showAlert).finally(() => {
-        setUploading(false);
-      });
+    // 仅拦截图片粘贴，文本粘贴直接放行，不阻断Ctrl/Cmd+C/V快捷键
+    if (clipboardData.files.length !== 1) return;
+    event.preventDefault();
+
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.trigger(undefined, "undo", undefined);
+    setUploading(true);
+    const myfile = clipboardData.files[0] as File;
+    const selection = editor.getSelection();
+    if (!selection) {
+      setUploading(false);
+      return;
     }
+    void insertImage(myfile, selection, showAlert).finally(() => {
+      setUploading(false);
+    });
   };
 
   function UploadImageButton() {
     const uploadRef = useRef<HTMLInputElement>(null);
-    
+
     const upChange = (event: any) => {
       for (let i = 0; i < event.currentTarget.files.length; i++) {
         const file = event.currentTarget.files[i];
@@ -89,12 +91,13 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
         }
       }
     };
-    
+
     return (
       <button
         type="button"
         onClick={() => uploadRef.current?.click()}
-        className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-w px-3 py-2 text-sm t-primary transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
+        // 缩小内边距，手机更容易点击
+        className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
       >
         <input
           ref={uploadRef}
@@ -171,7 +174,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
       <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
           <div
-            className={"relative min-h-0 overflow-hidden rounded-none border-0 bg-w"}
+            className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
             onDrop={(e) => {
               e.preventDefault();
               const editor = editorRef.current;
@@ -213,7 +216,9 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
                 smoothScrolling: false,
 
                 dragAndDrop: true,
-                pasteAs: { enabled: false },
+                // 移除 pasteAs 关闭配置，恢复原生复制粘贴快捷键
+                touchSupport: true, // 开启移动端触控适配
+                mouseWheelZoom: false, // 关闭滚轮缩放，手机更稳定
               }}
             />
           </div>
