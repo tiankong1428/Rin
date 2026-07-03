@@ -152,12 +152,15 @@ export function MarkdownEditor({
     if (editorValue !== content) editor.setValue(content);
   }, [content]);
 
-  // 放行系统剪贴快捷键，不劫持C/X/V
+  // 放行系统剪贴快捷键
   const onKeyDownCapture = (e: React.KeyboardEvent) => {
     const ctrl = e.ctrlKey || e.metaKey;
     if (!ctrl) return;
     if (e.key === 'c' || e.key === 'x' || e.key === 'v') return;
   };
+
+  // 外层放行原生系统右键/长按菜单
+  const openNativeMenu = () => {};
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
@@ -184,7 +187,7 @@ export function MarkdownEditor({
       </FlatInset>
       <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
         <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
-          {/* 核心移动端文本选择样式保留，解决整块选中、唤起系统菜单 */}
+          {/* 开启手机原生文本选择、长按菜单 */}
           <div
             className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
             style={{
@@ -192,6 +195,7 @@ export function MarkdownEditor({
               userSelect: "text",
               WebkitTouchCallout: "default",
             }}
+            onContextMenu={openNativeMenu}
             onKeyDownCapture={onKeyDownCapture}
             onDrop={(e) => {
               e.preventDefault();
@@ -228,7 +232,9 @@ export function MarkdownEditor({
                 renderControlCharacters: false,
                 smoothScrolling: false,
                 minimap: { enabled: false },
-                dragAndDrop: true
+                dragAndDrop: true,
+                // 核心：彻底关闭编辑器内置VSCode菜单
+                contextmenu: false
               }}
             />
           </div>
