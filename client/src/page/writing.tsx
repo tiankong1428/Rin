@@ -15,6 +15,21 @@ import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
 
+interface FeedUpdateParams {
+  id: number;
+  listed: boolean;
+  title?: string;
+  alias?: string;
+  content?: string;
+  summary?: string;
+  tags?: string[];
+  draft?: boolean;
+  loginRequired?: boolean;
+  createdAt?: Date;
+  onCompleted?: () => void;
+  showAlert: ShowAlertType;
+}
+
 async function publish({
   title,
   alias,
@@ -58,7 +73,7 @@ async function publish({
     onCompleted();
   }
   if (error) {
-    showAlert(error.value as string);
+    showAlert(error instanceof Error ? error.message : t("upload.failed"));
   }
   if (data) {
     showAlert(t("publish.success"), () => {
@@ -75,27 +90,12 @@ async function update({
   content,
   summary,
   tags,
-  listed,
   draft,
   loginRequired,
   createdAt,
   onCompleted,
   showAlert
-}: {
-  id: number;
-  listed: boolean;
-  title?: string;
-  alias?: string;
-  content?: string;
-  summary?: string;
-  tags?: string[];
-  listed?: boolean;
-  draft?: boolean;
-  loginRequired?: boolean;
-  createdAt?: Date;
-  onCompleted?: () => void;
-  showAlert: ShowAlertType;
-}) {
+}: FeedUpdateParams) {
   const t = i18n.t
   const { error } = await client.feed.update(
     id,
@@ -115,7 +115,7 @@ async function update({
     onCompleted();
   }
   if (error) {
-    showAlert(error.value as string);
+    showAlert(error instanceof Error ? error.message : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
       Cache.with(id).clear();
@@ -124,6 +124,7 @@ async function update({
   }
 }
 
+// 写作页面
 export function WritingPage({ id }: { id?: number }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -140,7 +141,7 @@ export function WritingPage({ id }: { id?: number }) {
   const [feedData, setFeedData] = useState<any>(null);
   const [createdAt, setCreatedAt] = useState<Date | undefined>(new Date());
   const [publishing, setPublishing] = useState(false)
-  const { showAlert, AlertUI } = useAlert()
+  const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
 
@@ -171,11 +172,11 @@ export function WritingPage({ id }: { id?: number }) {
       });
     } else {
       if (!title) {
-        showAlert(t("title_empty"))
+        showAlert(t("title.empty"));
         return;
       }
       if (!content) {
-        showAlert(t("content.empty"))
+        showAlert(t("content.empty"));
         return;
       }
       setPublishing(true)
@@ -207,14 +208,15 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章：移除profile等待，消除草稿时序冲突
+  // 拉取文章
   useEffect(() => {
+    if (profile === undefined) return;
     if (id) {
       client.feed
         .get(id)
         .then(({ data, error }) => {
           if (error) {
-            setPageError(error.value as string);
+            setPageError(error instanceof Error ? error.message : t("request.failed"));
             return;
           }
           if (data) {
@@ -222,9 +224,9 @@ export function WritingPage({ id }: { id?: number }) {
           }
         });
     }
-  }, [id]);
+  }, [id, profile]);
 
-  // 填充表单，移除未使用变量、恢复服务器更新弹窗、本地草稿不被覆盖
+  // 草稿&服务器版本对比逻辑
   useEffect(() => {
     if (!feedData) return;
     if (profile === undefined) return;
@@ -236,9 +238,12 @@ export function WritingPage({ id }: { id?: number }) {
     }
 
     const localModifiedAt = cache.getModifiedAt();
+    const localTitle = cache.getRaw("title");
+    const localContent = cache.getRaw("content");
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+    const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
 
-    // 本地有草稿 + 后端版本更新，弹出确认框
+    // 服务器更新弹窗优先
     if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
@@ -249,28 +254,23 @@ export function WritingPage({ id }: { id?: number }) {
         if (feedData.title) setTitle(feedData.title);
         if (feedData.content) setContent(feedData.content);
         if (feedData.hashtags) {
-          setTags(feedData.hashtags.map((item: {name:string}) => `#${item.name}`).join(" "));
+          setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
         }
         if ((feedData as any).alias) setAlias((feedData as any).alias);
         if ((feedData as any).summary) setSummary((feedData as any).summary || "");
         cache.touchModifiedAt();
       }
-      return;
-    }
-
-    // 完全无本地草稿才加载后端内容
-    if (localModifiedAt === null) {
+    } else if (localModifiedAt === null || localDraftIsEmpty) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
-        setTags(feedData.hashtags.map((item: {name:string}) => `#${item.name}`).join(" "));
+        setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
       }
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
     }
 
-    // 固定后台字段，不受草稿影响
     setListed((feedData as any).listed === 1);
     setDraft((feedData as any).draft === 1);
     setLoginRequired((feedData as any).loginRequired === 1);
@@ -286,7 +286,7 @@ export function WritingPage({ id }: { id?: number }) {
       mermaid.run({
         suppressErrors: true,
         nodes: document.querySelectorAll("pre.mermaid_default")
-      }).then(()=>{
+      }).then(() => {
         mermaid.initialize({
           startOnLoad: false,
           theme: "dark",
@@ -304,11 +304,31 @@ export function WritingPage({ id }: { id?: number }) {
     debouncedUpdate();
   }, [content, debouncedUpdate]);
 
+  function PublishImageButton() {
+    return null;
+  }
+
+  function PublishImageButton() {
+    return null;
+  }
+
+  function PublishImageButton() {
+    return null;
+  }
+
+  function PublishImageButton() {
+    return null;
+  }
+
+  function PublishImageButton() {
+    return null;
+  }
+
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
         onClick={publishButton}
-        className={`inline-flex items-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
+        className={`inline-flex items-center justify-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
         disabled={publishing}
       >
         {publishing && <Loading type="spin" height={16} width={16} />}
@@ -320,83 +340,111 @@ export function WritingPage({ id }: { id?: number }) {
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
-        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/10 items-start justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
-            <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-              {id !== undefined ? t("update.title") : t("publish.title")}
-            </p>
+        <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
+          <FlatTabButton active={preview === 'edit'} onClick={() => setPreview('edit')}> {t("edit")} </FlatTabButton>
+          <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
+          <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
+          <div className="flex-grow" />
+          <UploadImageButton />
+          {uploading &&
+            <div className="flex flex-row items-center space-x-2">
+              <Loading type="spin" color="#FC466B" height={16} width={16} />
+              <span className="text-sm text-neutral-500">{t('uploading')}</span>
+            </div>
+          }
+        </FlatInset>
+        <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
+          <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
+            <div
+              className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
+              onDrop={(e) => {
+                e.preventDefault();
+                const editor = editorRef.current;
+                if (!editor) return;
+                for (let i = 0; i < e.dataTransfer.files.length; i++) {
+                  const selection = editor.getSelection();
+                  if (!selection) return;
+                  const file = e.dataTransfer.files[i];
+                  setUploading(true);
+                  void insertImage(file, selection, showAlert).finally(() => {
+                    setUploading(false);
+                  });
+                }
+              }}
+              onPaste={handlePaste}
+            >
+              <Input
+                id={id}
+                value={title}
+                setValue={setTitle}
+                placeholder={t("title")}
+                variant="flat"
+                className="text-base"
+              />
+              <Input
+                id={id}
+                value={summary}
+                setValue={setSummary}
+                placeholder={t("summary")}
+                variant="flat"
+              />
+              <Input
+                id={id}
+                value={alias}
+                setValue={setAlias}
+                placeholder={t("alias")}
+                variant="flat"
+              />
+              <Input
+                id={id}
+                value={tags}
+                setValue={setTags}
+                placeholder={t("tags")}
+                variant="flat"
+                className="lg:col-span-2"
+              />
+            </div>
           </div>
-          <PublishButton className="w-auto" />
         </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="lg:col-span-2">
-            <Input
-              value={title}
-              setValue={setTitle}
-              placeholder={t("title")}
-              variant="flat"
-              className="text-base"
-            />
-          </div>
-          <Input
-            value={summary}
-            setValue={setSummary}
-            placeholder={t("summary")}
-            variant="flat"
-          />
-          <Input
-            value={alias}
-            setValue={setAlias}
-            placeholder={t("alias")}
-            variant="flat"
-          />
-          <Input
-            value={tags}
-            setValue={setTags}
-            placeholder={t("tags")}
-            variant="flat"
-            className="lg:col-span-2"
-          />
-        </div>
-
         <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
             onClick={() => setDraft(!draft)}
           >
             <p>{t('visible.self_only')}</p>
             <Checkbox
+              id="draft"
               value={draft}
               setValue={setDraft}
               placeholder={t('draft')}
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
             onClick={() => setListed(!listed)}
           >
             <p>{t('listed')}</p>
             <Checkbox
+              id="listed"
               value={listed}
               setValue={setListed}
               placeholder={t('listed')}
             />
           </FlatMetaRow>
           <FlatMetaRow
-            className="cursor-pointer rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10"
+            className="cursor-pointer rounded-none border-0 bg-transparent p-3 dark:border-white/10"
             onClick={() => setLoginRequired(!loginRequired)}
           >
             <p>仅登录可见</p>
             <Checkbox
+              id="loginRequired"
               value={loginRequired}
               setValue={setLoginRequired}
               placeholder="仅登录可见"
             />
           </FlatMetaRow>
           {isAdmin && (
-            <FlatMetaRow className="gap-3 rounded-none border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10 xl:col-span-1">
+            <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent p-3 dark:border-white/10 xl:col-span-1">
               <p className="mr-2 whitespace-nowrap">
                 {t('created_at')}
               </p>
@@ -408,7 +456,6 @@ export function WritingPage({ id }: { id?: number }) {
     )
   }
 
-  // 错误页面分支
   if (pageError) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
@@ -433,12 +480,12 @@ export function WritingPage({ id }: { id?: number }) {
     return (
       <>
         <Helmet>
-          <title>{`${title} - ${siteName}`}</title>
+          <title>{`${title} - ${siteName.name}`}</title>
           <meta property="og:site_name" content={siteName} />
-          <meta property="og:title" content={t('writing')} />
+          <meta property="og:title" content={title} />
           <meta property="og:image" content={siteConfig.avatar} />
           <meta property="og:type" content="article" />
-          <meta property="og:url" content={location.href} />
+          <meta property="og:url" content={document.URL} />
         </Helmet>
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-2xl bg-w p-8 text-center">
@@ -448,14 +495,14 @@ export function WritingPage({ id }: { id?: number }) {
               {showLoginButton && (
                 <button
                   onClick={() => (window.location.href = "/login")}
-                  className="rounded-xl bg-theme px-6 py-2 text-sm text-white transition-colors hover:bg-theme-hover"
+                  className="rounded-xl bg-theme px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-theme-hover"
                 >
                   去登录
                 </button>
               )}
               <button
                 onClick={() => (window.location.href = "/")}
-                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+                className="rounded-xl bg-neutral-200 px-6 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
               >
                 返回首页
               </button>
@@ -467,7 +514,6 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // 无文章数据显示加载，有数据直接渲染表单
   return (
     <>
       <Helmet>
@@ -476,7 +522,7 @@ export function WritingPage({ id }: { id?: number }) {
         <meta property="og:title" content={t('writing')} />
         <meta property="og:image" content={siteConfig.avatar} />
         <meta property="og:type" content="article" />
-        <meta property="og:url" content={location.href} />
+        <meta property="og:url" content={document.URL} />
       </Helmet>
       {!feedData ? (
         <div className="flex justify-center py-20">
