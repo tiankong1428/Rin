@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const cacheDir = process.env.RIN_VITE_CACHE_DIR || "../.vite/client";
   
   return {
-    base: "./",
+    base: "/",
     cacheDir,
     build: {
       outDir: '../dist/client',
