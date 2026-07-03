@@ -74,36 +74,6 @@ export function MarkdownEditor({
   mode: "ir",
   placeholder,
   theme: colorMode === "dark" ? "dark" : "classic",
-  // 移除 lang: "zh_CN"
-  i18n: {
-    undo: "撤销",
-    redo: "重做",
-    bold: "粗体",
-    italic: "斜体",
-    strike: "删除线",
-    link: "链接",
-    upload: "上传",
-    table: "表格",
-    fullscreen: "全屏",
-    preview: "预览",
-    both: "分栏",
-    editMode: "编辑模式",
-    codeTheme: "代码主题",
-    export: "导出",
-    headings: "标题",
-    list: "无序列表",
-    orderedList: "有序列表",
-    check: "待办",
-    indent: "增加缩进",
-    outdent: "减少缩进",
-    quote: "引用",
-    code: "代码块",
-    inlineCode: "行内代码",
-    line: "分割线",
-    image: "图片",
-    outline: "大纲",
-    confirmClear: "确认清空编辑器内容吗？",
-  },
   toolbar: [
     "headings", "bold", "italic", "strike", "link", "|",
     "list", "ordered-list", "check", "outdent", "indent", "|",
@@ -152,7 +122,7 @@ export function MarkdownEditor({
       }
     }
   },
-  // 删掉 lang: "zh_CN"
+  // 删除 lang: "zh_CN"，删除所有i18n自定义翻译代码
 });
 
         vditorRef.current = vditor;
