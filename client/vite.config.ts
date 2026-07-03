@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
   verbose: true,
   targets: [
     {
-      src: "node_modules/vditor/dist/*",
+      src: "../node_modules/vditor/dist/**/*",
       dest: "../dist/client/assets/vditor/dist"
     }
   ]
