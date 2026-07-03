@@ -70,61 +70,61 @@ export function MarkdownEditor({
     const timer = setTimeout(() => {
       try {
         const vditor = new Vditor(container, {
-  // 删掉 cdn 配置
-  height: parseInt(height),
-  mode: "ir",
-  placeholder,
-  theme: colorMode === "dark" ? "dark" : "classic",
-  toolbar: [
-    "headings", "bold", "italic", "strike", "link", "|",
-    "list", "ordered-list", "check", "outdent", "indent", "|",
-    "quote", "line", "code", "inline-code", "insert-before", "insert-after", "|",
-    "upload", "table", "|",
-    "undo", "redo", "|",
-    "fullscreen", "edit-mode", "both", "preview", "outline", "code-theme", "export",
-  ],
-  outline: { enable: false, position: "left" },
-  counter: { enable: false },
-  cache: { enable: false },
-  upload: {
-    handler: async (files: File[]) => {
-      setUploading(true);
-      try {
-        for (const file of files) {
-          try {
-            const result = await uploadImageFile(file);
-            const markdown = getFileMarkdown(file, result.url, {
-              blurhash: (result as any).blurhash,
-              width: (result as any).width,
-              height: (result as any).height,
-            });
-            vditorRef.current?.insertValue(markdown);
-          } catch (err) {
-            console.error(err);
-            showAlert(err instanceof Error ? err.message : t("upload.failed"));
-          }
-        }
-      } finally {
-        setUploading(false);
-      }
-      return "";
-    },
-  },
-  input: (value) => {
-    if (!isComposingRef.current) setContent(value);
-  },
-  after: () => {
-    vditorReadyRef.current = true;
-    if (content && vditor) {
-      try {
-        vditor.setValue(content);
-      } catch (e) {
-        console.warn("Vditor setValue failed:", e);
-      }
-    }
-  },
-  lang: "zh_CN",
-});
+          // 已彻底删除 cdn 配置，不会发起任何动态js请求
+          height: parseInt(height),
+          mode: "ir",
+          placeholder,
+          theme: colorMode === "dark" ? "dark" : "classic",
+          toolbar: [
+            "headings", "bold", "italic", "strike", "link", "|",
+            "list", "ordered-list", "check", "outdent", "indent", "|",
+            "quote", "line", "code", "inline-code", "insert-before", "insert-after", "|",
+            "upload", "table", "|",
+            "undo", "redo", "|",
+            "fullscreen", "edit-mode", "both", "preview", "outline", "code-theme", "export",
+          ],
+          outline: { enable: false, position: "left" },
+          counter: { enable: false },
+          cache: { enable: false },
+          upload: {
+            handler: async (files: File[]) => {
+              setUploading(true);
+              try {
+                for (const file of files) {
+                  try {
+                    const result = await uploadImageFile(file);
+                    const markdown = getFileMarkdown(file, result.url, {
+                      blurhash: (result as any).blurhash,
+                      width: (result as any).width,
+                      height: (result as any).height,
+                    });
+                    vditorRef.current?.insertValue(markdown);
+                  } catch (err) {
+                    console.error(err);
+                    showAlert(err instanceof Error ? err.message : t("upload.failed"));
+                  }
+                }
+              } finally {
+                setUploading(false);
+              }
+              return "";
+            },
+          },
+          input: (value) => {
+            if (!isComposingRef.current) setContent(value);
+          },
+          after: () => {
+            vditorReadyRef.current = true;
+            if (content && vditor) {
+              try {
+                vditor.setValue(content);
+              } catch (e) {
+                console.warn("Vditor setValue failed:", e);
+              }
+            }
+          },
+          lang: "zh_CN",
+        });
 
         vditorRef.current = vditor;
 
@@ -157,7 +157,7 @@ export function MarkdownEditor({
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-  }, []); // 仅挂载一次
+  }, []);
 
   // 外部 content 同步
   useEffect(() => {
@@ -177,7 +177,6 @@ export function MarkdownEditor({
 
   return (
     <div className="flex flex-col gap-0 sm:gap-3">
-      {/* 顶部操作栏：复原 + 清空 + 上传状态 */}
       <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
         <div className="flex-grow" />
         {onRestoreServer && (
@@ -202,15 +201,12 @@ export function MarkdownEditor({
           </div>
         )}
       </FlatInset>
-
-      {/* 编辑器全宽 */}
       <div
         className="relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"
         style={{ height }}
       >
         <div ref={editorContainerRef} className="vditor-container" style={{ height: "100%" }} />
       </div>
-
       <AlertUI />
     </div>
   );
