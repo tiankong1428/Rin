@@ -1,5 +1,5 @@
 import Editor from '@monaco-editor/react';
-import { editor, KeyMod, KeyCode } from 'monaco-editor';
+import { editor } from 'monaco-editor';
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
