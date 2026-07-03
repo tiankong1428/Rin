@@ -227,24 +227,29 @@ export function WritingPage({ id }: { id?: number }) {
 
   // 填充表单+权限校验，修复空草稿、profile延迟导致不渲染内容
   useEffect(() => {
-    if (!feedData) return;
-    if (profile === undefined) return;
-    if (profile === null) return;
+  if (!feedData) return;
+  if (profile === undefined) return;
+  if (profile === null) return;
 
-    // 权限校验
-    if (feedData.uid !== profile.id && !isAdmin) {
-      setPageError("无权限编辑此文章");
-      return;
-    }
+  if (feedData.uid !== profile.id && !isAdmin) {
+    setPageError("无权限编辑此文章");
+    return;
+  }
 
-    const localModifiedAt = cache.getModifiedAt();
-    const localTitle = cache.getRaw("title");
-    const localContent = cache.getRaw("content");
-    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
-    const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
+  const localModifiedAt = cache.getModifiedAt();
+  const localTitle = cache.getRaw("title");
+  const localContent = cache.getRaw("content");
+  const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+  const localDraftIsEmpty = !localTitle?.trim() && !localContent?.trim();
 
-    // 本地无草稿 / 草稿完全空白，强制读取服务器内容
-    if (localModifiedAt === null || localDraftIsEmpty) {
+  // 优先判断服务器更新，正常弹出确认弹窗
+  if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
+    const useServer = confirm(
+      "检测到服务器上有更新的版本。\n\n" +
+      "点击「确定」：加载服务器最新版本\n" +
+      "点击「取消」：继续编辑本地草稿"
+    );
+    if (useServer) {
       if (feedData.title) setTitle(feedData.title);
       if (feedData.content) setContent(feedData.content);
       if (feedData.hashtags) {
@@ -253,30 +258,24 @@ export function WritingPage({ id }: { id?: number }) {
       if ((feedData as any).alias) setAlias((feedData as any).alias);
       if ((feedData as any).summary) setSummary((feedData as any).summary || "");
       cache.touchModifiedAt();
-    } else if (serverUpdatedAt > localModifiedAt) {
-      const useServer = confirm(
-        "检测到服务器上有更新的版本。\n\n" +
-        "点击「确定」：加载服务器最新版本\n" +
-        "点击「取消」：继续编辑本地草稿"
-      );
-      if (useServer) {
-        if (feedData.title) setTitle(feedData.title);
-        if (feedData.content) setContent(feedData.content);
-        if (feedData.hashtags) {
-          setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
-        }
-        if ((feedData as any).alias) setAlias((feedData as any).alias);
-        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-        cache.touchModifiedAt();
-      }
     }
+  } else if (localModifiedAt === null || localDraftIsEmpty) {
+    // 无草稿/草稿空白，直接读取服务器不弹窗
+    if (feedData.title) setTitle(feedData.title);
+    if (feedData.content) setContent(feedData.content);
+    if (feedData.hashtags) {
+      setTags(feedData.hashtags.map(({ name }: { name: string }) => `#${name}`).join(" "));
+    }
+    if ((feedData as any).alias) setAlias((feedData as any).alias);
+    if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+    cache.touchModifiedAt();
+  }
 
-    // 固定后台字段，不受本地草稿影响
-    setListed((feedData as any).listed === 1);
-    setDraft((feedData as any).draft === 1);
-    setLoginRequired((feedData as any).loginRequired === 1);
-    setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile]);
+  setListed((feedData as any).listed === 1);
+  setDraft((feedData as any).draft === 1);
+  setLoginRequired((feedData as any).loginRequired === 1);
+  setCreatedAt(new Date(feedData.createdAt));
+}, [feedData, profile]);
 
   const debouncedUpdate = useCallback(
     _.debounce(() => {
