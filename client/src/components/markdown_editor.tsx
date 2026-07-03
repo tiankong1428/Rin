@@ -18,7 +18,7 @@ interface MarkdownEditorProps {
 export function MarkdownEditor({
   content,
   setContent,
-  placeholder = "> Write your content here...",
+  placeholder = "> 在这里输入内容...",
   height = "400px",
   onRestoreServer,
 }: MarkdownEditorProps) {
@@ -35,7 +35,7 @@ export function MarkdownEditor({
     const insertTexts: string[] = [];
     try {
       for (const file of files) {
-        const res = await uploadImageFile(file, showAlert);
+        const res = await uploadImageFile(file);
         const imgMd = buildMarkdownImage(file.name, res.url, {
           blurhash: res.blurhash,
           width: res.width,
@@ -59,6 +59,7 @@ export function MarkdownEditor({
     const vditor = new Vditor(vditorDomRef.current!, {
       height,
       placeholder,
+      lang: "zh_CN",
       mode: "sv",
       theme: isDark ? "dark" : "classic",
       preview: {
@@ -70,7 +71,7 @@ export function MarkdownEditor({
       upload: {
         accept: "image/*",
         multiple: true,
-        handler: uploadFile,
+        handler: uploadFile
       },
       toolbar: [
         "emoji",
@@ -120,7 +121,6 @@ export function MarkdownEditor({
     <div className="flex flex-col gap-0 sm:gap-3">
       <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
         <div className="flex-grow" />
-        {/* 复原按钮 在上传左侧 */}
         {onRestoreServer && (
           <button
             onClick={handleRestore}
