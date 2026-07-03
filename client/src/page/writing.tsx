@@ -142,13 +142,29 @@ export function WritingPage({ id }: { id?: number }) {
   const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
+  // 新增初始化锁，解决浏览器时序差异导致直接覆盖草稿
+  const [initLock, setInitLock] = useState(true);
+
+  // 还原服务器版本，一键覆盖本地草稿
+  function handleRestoreServer() {
+    if (!feedData) return;
+    const ok = confirm("确定将丢弃本地所有草稿，使用服务器最新内容？");
+    if (!ok) return;
+    if (feedData.title) setTitle(feedData.title);
+    if (feedData.content) setContent(feedData.content);
+    if (feedData.hashtags) {
+      setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+    }
+    if ((feedData as any).alias) setAlias((feedData as any).alias);
+    if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+    cache.touchModifiedAt();
+  }
 
   function publishButton() {
     if (publishing) return;
     const tagsplit = tags.split("#").filter(tag => tag.trim() !== "").map(tag => tag.trim());
     if (id !== undefined) {
       setPublishing(true)
-      // 修复：传入listed
       update({
         id,
         listed,
@@ -189,6 +205,12 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }
 
+  // 初始化300ms解锁，保证草稿优先渲染
+  useEffect(() => {
+    const timer = setTimeout(() => setInitLock(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
   // 登录监听
   useEffect(() => {
     if (profile === undefined) return;
@@ -212,9 +234,9 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [id]);
 
-  // 草稿逻辑，删除未使用localTitle/localContent
+  // 草稿对比逻辑，加initLock锁，浏览器不会直接覆盖草稿
   useEffect(() => {
-    if (!feedData) return;
+    if (!feedData || initLock) return;
     if (profile === undefined) return;
     if (profile === null) return;
 
@@ -262,7 +284,7 @@ export function WritingPage({ id }: { id?: number }) {
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile]);
+  }, [feedData, profile, initLock]);
 
   const debouncedUpdate = useCallback(
     _.debounce(() => {
@@ -463,7 +485,12 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="mt-2 flex flex-col gap-4 sm:gap-6">
           <MetaInput className="p-4 sm:p-5 md:p-6" />
           <FlatPanel className="overflow-hidden p-0">
-            <MarkdownEditor content={content} setContent={setContent} height='680px' />
+            <MarkdownEditor
+              content={content}
+              setContent={setContent}
+              height='680px'
+              onRestoreServer={handleRestoreServer}
+            />
           </FlatPanel>
         </div>
       )}
