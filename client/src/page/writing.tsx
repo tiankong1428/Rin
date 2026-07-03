@@ -13,7 +13,7 @@ import {Cache} from '../utils/cache';
 import {useSiteConfig} from "../hooks/useSiteConfig";
 import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
-import { MarkdownEditor } from '../components/MarkdownEditor';
+import { MarkdownEditor } from '../components/markdown_editor';
 
 async function publish({
   title,
