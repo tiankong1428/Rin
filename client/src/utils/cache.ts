@@ -58,7 +58,7 @@ export class Cache {
         return timeStr ? parseInt(timeStr, 10) : null;
     }
 getRaw(key: string) {
-  return localStorage.getItem(this.getKey(key));
+  return localStorage.getItem(`cache_${this.id}_${key}`);
 }
     // 更新本地草稿的修改时间为当前时间
     public touchModifiedAt() {
