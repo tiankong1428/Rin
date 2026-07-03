@@ -8,7 +8,7 @@ import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 import { Markdown } from "./markdown";
 
-interface VditorEditorProps {
+interface MarkdownEditorProps {
   content: string;
   setContent: (content: string) => void;
   placeholder?: string;
@@ -16,13 +16,14 @@ interface VditorEditorProps {
   onRestoreServer?: () => void;
 }
 
-export function VditorEditor({
+// 导出名保持 MarkdownEditor，页面无需改动
+export function MarkdownEditor({
   content,
   setContent,
   placeholder = "> Write your content here...",
   height = "400px",
   onRestoreServer,
-}: VditorEditorProps) {
+}: MarkdownEditorProps) {
   const { t } = useTranslation();
   const colorMode = useColorMode();
   const isDark = colorMode === "dark";
@@ -106,6 +107,7 @@ export function VditorEditor({
     };
   }, []);
 
+  // 外部内容更新同步编辑器（复原功能）
   useEffect(() => {
     if (!vditorRef.current) return;
     if (vditorRef.current.getValue() !== content) {
@@ -125,6 +127,7 @@ export function VditorEditor({
           {t("comparison")}
         </FlatTabButton>
         <div className="flex-grow" />
+        {/* 复原按钮在上传图片左侧 */}
         {onRestoreServer && (
           <button
             onClick={handleRestore}
