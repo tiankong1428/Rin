@@ -75,6 +75,7 @@ async function update({
   content,
   summary,
   tags,
+  listed,
   draft,
   loginRequired,
   createdAt,
@@ -147,6 +148,7 @@ export function WritingPage({ id }: { id?: number }) {
     const tagsplit = tags.split("#").filter(tag => tag.trim() !== "").map(tag => tag.trim());
     if (id !== undefined) {
       setPublishing(true)
+      // 修复：传入listed
       update({
         id,
         listed,
@@ -197,7 +199,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [profile, pageError]);
 
-  // 拉取文章，移除profile阻塞，草稿优先渲染
+  // 拉取文章
   useEffect(() => {
     if (id) {
       client.feed.get(id).then(({ data, error }) => {
@@ -210,7 +212,7 @@ export function WritingPage({ id }: { id?: number }) {
     }
   }, [id]);
 
-  // 草稿对比逻辑，删除未使用localDraftIsEmpty
+  // 草稿逻辑，删除未使用localTitle/localContent
   useEffect(() => {
     if (!feedData) return;
     if (profile === undefined) return;
@@ -222,12 +224,10 @@ export function WritingPage({ id }: { id?: number }) {
     }
 
     const localModifiedAt = cache.getModifiedAt();
-    const localTitle = cache.getRaw("title") ?? "";
-    const localContent = cache.getRaw("content") ?? "";
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
 
-    // 本地有草稿 + 服务器更新，弹窗
-    if (localModifiedAt !== null && serverUpdatedAt > localUpdatedAt) {
+    // 本地有草稿 + 服务器更新，弹窗选择
+    if (localModifiedAt !== null && serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
         "点击「确定」：加载服务器最新版本\n" +
@@ -258,7 +258,6 @@ export function WritingPage({ id }: { id?: number }) {
       cache.touchModifiedAt();
     }
 
-    // 后台基础状态同步
     setListed(!!feedData.listed);
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
@@ -295,7 +294,7 @@ export function WritingPage({ id }: { id?: number }) {
   function MetaInput({ className }: { className?: string }) {
     return (
       <FlatPanel className={className}>
-        <div className="flex flex-row gap-4 border-b border-black/5 pb-5 dark:border-white/5 items-start justify-between">
+        <div className="flex flex-row gap-4 border-b border-black/10 pb-5 dark:border-white/10 items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">{t('writing')}</p>
             <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
