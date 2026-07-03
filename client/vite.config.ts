@@ -18,34 +18,26 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      visualizer({ open: !isDev })
+      visualizer({ open: !isDev }),
+      // 👇 就是缺了这一段，之前只 import 了没在 plugins 里用
+      copy({
+        hook: "writeBundle",
+        targets: [
+          {
+            src: "node_modules/vditor/dist/**/*",
+            dest: "../dist/client/assets/vditor/dist"
+          }
+        ]
+      })
     ],
     server: {
       proxy: {
-        "/api": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
-        "/rss.xml": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
-        "/atom.xml": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
-        "/rss.json": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
-        "/feed.json": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
-        "/feed.xml": {
-          target: serverTarget,
-          changeOrigin: false,
-        },
+        "/api": { target: serverTarget, changeOrigin: false },
+        "/rss.xml": { target: serverTarget, changeOrigin: false },
+        "/atom.xml": { target: serverTarget, changeOrigin: false },
+        "/rss.json": { target: serverTarget, changeOrigin: false },
+        "/feed.json": { target: serverTarget, changeOrigin: false },
+        "/feed.xml": { target: serverTarget, changeOrigin: false },
       },
     },
     test: {
