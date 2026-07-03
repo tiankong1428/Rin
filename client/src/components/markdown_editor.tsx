@@ -9,7 +9,6 @@ import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 import { Markdown } from "./markdown";
 
-// 新增还原服务器版本回调
 interface MarkdownEditorProps {
   content: string;
   setContent: (content: string) => void;
@@ -56,7 +55,6 @@ export function MarkdownEditor({
     }
   }
 
-  // 粘贴支持多张图片，文本粘贴放行不阻断快捷键
   const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
     const clipboardData = event.clipboardData;
     const files = Array.from(clipboardData.files);
@@ -88,7 +86,6 @@ export function MarkdownEditor({
       const selection = editor.getSelection();
       if (!selection) return;
 
-      // 校验所有图片大小
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size > 5 * 1024 * 1000) {
@@ -133,6 +130,9 @@ export function MarkdownEditor({
   const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
 
+    // 禁用编辑器自身自定义右键，不屏蔽浏览器原生长按菜单
+    editor.onContextMenu(e => e.preventDefault());
+
     editor.onDidCompositionStart(() => {
       isComposingRef.current = true;
     });
@@ -174,16 +174,13 @@ export function MarkdownEditor({
         <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
         <div className="flex-grow" />
         <UploadImageButton />
-        {/* 新增还原服务器版本按钮 */}
+        {/* 复原按钮：中文文字，无二次确认弹窗 */}
         {onRestoreServer && (
           <button
-            onClick={() => {
-              const ok = confirm(t("restore.server.confirm"));
-              if (ok) onRestoreServer();
-            }}
+            onClick={onRestoreServer}
             className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-theme px-2 py-1 text-sm text-white transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
           >
-            <span>{t("restore.server")}</span>
+            <span>复原</span>
           </button>
         )}
         {uploading &&
@@ -222,23 +219,23 @@ export function MarkdownEditor({
               defaultValue={content}
               theme={colorMode === "dark" ? "vs-dark" : "light"}
               options={{
-  wordWrap: "on",
-  fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
-  fontLigatures: false,
-  letterSpacing: 0,
-  fontSize: 14,
-  lineNumbers: "off",
-  accessibilitySupport: "off",
-  unicodeHighlight: { ambiguousCharacters: false },
-  renderWhitespace: "none",
-  renderControlCharacters: false,
-  smoothScrolling: false,
-  minimap: {
-    enabled: false
-  },
-  dragAndDrop: true,
-  contextmenu: false
-}}
+                wordWrap: "on",
+                fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
+                fontLigatures: false,
+                letterSpacing: 0,
+                fontSize: 14,
+                lineNumbers: "off",
+                accessibilitySupport: "off",
+                unicodeHighlight: { ambiguousCharacters: false },
+                renderWhitespace: "none",
+                renderControlCharacters: false,
+                smoothScrolling: false,
+                minimap: {
+                  enabled: false
+                },
+                dragAndDrop: true
+                // 移除不存在的 keyboard 配置，不全局关闭contextmenu
+              }}
             />
           </div>
         </div>
