@@ -1,11 +1,11 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import Vditor from "vditor";
 import { useTranslation } from "react-i18next";
 import Loading from "react-loading";
 import { FlatInset } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
-import { buildMarkdownImage, uploadImageFile } from "./utils/image-upload";
+import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
 
 interface MarkdownEditorProps {
   content: string;
@@ -30,27 +30,6 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState(false);
   const { showAlert, AlertUI } = useAlert();
 
-  const uploadFile = async (files: File[]) => {
-    setUploading(true);
-    const insertTexts: string[] = [];
-    try {
-      for (const file of files) {
-        const res = await uploadImageFile(file);
-        const imgMd = buildMarkdownImage(file.name, res.url, {
-          blurhash: res.blurhash,
-          width: res.width,
-          height: res.height,
-        });
-        insertTexts.push(imgMd);
-      }
-      vditorRef.current?.insertValue(insertTexts.join("\n"));
-    } catch (err) {
-      showAlert(t("upload.failed"));
-    } finally {
-      setUploading(false);
-    }
-  };
-
   useEffect(() => {
     if (!vditorDomRef.current || vditorRef.current) return;
 
@@ -66,7 +45,6 @@ export function MarkdownEditor({
       cache: false,
       value: content,
       input: (val) => setContent(val),
-      // 完全移除upload配置，杜绝TS2559报错
       toolbar: [
         "emoji",
         "headings",
@@ -93,24 +71,13 @@ export function MarkdownEditor({
 
     vditorRef.current = vditor;
 
-    // 修复：vditor.element 替代不存在的 dom
-    const editorDom = vditor.element;
-    const pasteHandler = async (e: ClipboardEvent) => {
-      const items = Array.from(e.clipboardData?.files ?? []) as File[];
-      if (items.length) {
-        e.preventDefault();
-        await uploadFile(items);
-      }
-    };
-    editorDom.addEventListener("paste", pasteHandler);
-
     return () => {
-      editorDom.removeEventListener("paste", pasteHandler);
       vditor.destroy();
       vditorRef.current = null;
     };
   }, []);
 
+  // 外部内容同步（复原按钮回填）
   useEffect(() => {
     if (!vditorRef.current) return;
     if (vditorRef.current.getValue() !== content) {
@@ -130,7 +97,7 @@ export function MarkdownEditor({
         {onRestoreServer && (
           <button
             onClick={handleRestore}
-            className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-theme px-2 py-1 text-sm text-white transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
+            className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-theme px-2 py-1 text-sm text-white"
           >
             <span>复原</span>
           </button>
