@@ -1,99 +1,267 @@
-import { useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
+import Editor from '@monaco-editor/react';
+import { editor } from 'monaco-editor';
+import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import Loading from "react-loading";
+import Loading from 'react-loading';
+import { FlatInset, FlatTabButton } from "@rin/ui";
+import { useAlert } from "./dialog";
+import { useColorMode } from "../utils/darkModeUtils";
+import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
+import { Markdown } from "./markdown";
 
+// 新增还原服务器版本回调
 interface MarkdownEditorProps {
   content: string;
-  setContent: (v: string) => void;
-  height: string;
+  setContent: (content: string) => void;
+  placeholder?: string;
+  height?: string;
   onRestoreServer?: () => void;
 }
 
-export default function MarkdownEditor({
+export function MarkdownEditor({
   content,
   setContent,
-  height,
+  placeholder = "> Write your content here...",
+  height = "400px",
   onRestoreServer,
 }: MarkdownEditorProps) {
   const { t } = useTranslation();
-  const editorRef = useRef<any>(null);
+  const colorMode = useColorMode();
+  const editorRef = useRef<editor.IStandaloneCodeEditor>();
+  const isComposingRef = useRef(false);
+  const [preview, setPreview] = useState<'edit' | 'preview' | 'comparison'>('edit');
   const [uploading, setUploading] = useState(false);
+  const { showAlert, AlertUI } = useAlert();
 
-  function handleEditorDidMount(editor: any) {
-    editorRef.current = editor;
+  async function insertImage(
+    file: File,
+    range: NonNullable<ReturnType<editor.IStandaloneCodeEditor["getSelection"]>>,
+    showAlert: (msg: string) => void,
+  ) {
+    try {
+      const result = await uploadImageFile(file);
+      const editorInstance = editorRef.current;
+      if (!editorInstance) return;
+      editorInstance.executeEdits(undefined, [{
+        range,
+        text: buildMarkdownImage(file.name, result.url, {
+          blurhash: result.blurhash,
+          width: result.width,
+          height: result.height,
+        }),
+      }]);
+    } catch (error) {
+      console.error(error);
+      showAlert(error instanceof Error ? error.message : t("upload.failed"));
+    }
   }
 
-  async function triggerUpload() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.multiple = true;
-    input.onchange = async (e) => {
-      const files = (e.target as HTMLInputElement).files;
-      if (!files || files.length === 0) return;
-      setUploading(true);
-      try {
-        const urls: string[] = [];
-        // 移除未使用 file 变量，直接写固定占位
-        urls.push(``);
-        const insert = urls.join("\n");
-        editorRef.current?.trigger("", "type", insert);
-      } catch (err) {
-        (window as any).showAlert?.(t("upload.image.fail"));
-      } finally {
-        setUploading(false);
+  // 粘贴支持多张图片，文本粘贴放行不阻断快捷键
+  const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const clipboardData = event.clipboardData;
+    const files = Array.from(clipboardData.files);
+    if (files.length === 0) return;
+    event.preventDefault();
+
+    const editor = editorRef.current;
+    if (!editor) return;
+    const selection = editor.getSelection();
+    if (!selection) return;
+
+    setUploading(true);
+    const uploadAll = async () => {
+      for (const file of files) {
+        await insertImage(file, selection, showAlert);
       }
     };
-    input.click();
+    void uploadAll().finally(() => setUploading(false));
+  };
+
+  function UploadImageButton() {
+    const uploadRef = useRef<HTMLInputElement>(null);
+
+    const upChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.currentTarget.files;
+      if (!files || files.length === 0) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      const selection = editor.getSelection();
+      if (!selection) return;
+
+      // 校验所有图片大小
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 5 * 1024 * 1000) {
+          showAlert(t("upload.failed$size", { size: 5 }));
+          uploadRef.current!.value = "";
+          return;
+        }
+      }
+
+      setUploading(true);
+      const uploadAll = async () => {
+        for (let i = 0; i < files.length; i++) {
+          await insertImage(files[i], selection, showAlert);
+        }
+      };
+      void uploadAll().finally(() => {
+        setUploading(false);
+        uploadRef.current!.value = "";
+      });
+    };
+
+    return (
+      <button
+        type="button"
+        onClick={() => uploadRef.current?.click()}
+        className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
+      >
+        <input
+          ref={uploadRef}
+          onChange={upChange}
+          className="hidden"
+          type="file"
+          multiple
+          accept="image/gif,image/jpeg,image/jpg,image/png"
+        />
+        <i className="ri-image-add-line" />
+        <span>Image</span>
+      </button>
+    );
   }
 
+  const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
+
+    editor.onDidCompositionStart(() => {
+      isComposingRef.current = true;
+    });
+
+    editor.onDidCompositionEnd(() => {
+      isComposingRef.current = false;
+      setContent(editor.getValue());
+    });
+
+    editor.onDidChangeModelContent(() => {
+      if (!isComposingRef.current) {
+        setContent(editor.getValue());
+      }
+    });
+
+    editor.onDidBlurEditorText(() => {
+      setContent(editor.getValue());
+    });
+  };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    const editorValue = model.getValue();
+    if (editorValue !== content) {
+      editor.setValue(content);
+    }
+  }, [content]);
+
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-black/10 dark:border-white/10">
-        <button
-          onClick={triggerUpload}
-          disabled={uploading}
-          className="px-3 py-1 rounded bg-secondary text-sm disabled:opacity-60"
-        >
-          {uploading ? <Loading type="spin" width={14} height={14} /> : t("upload.image")}
-        </button>
+    <div className="flex flex-col gap-0 sm:gap-3">
+      <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-3 dark:border-white/10">
+        <FlatTabButton active={preview === 'edit'} onClick={() => setPreview('edit')}> {t("edit")} </FlatTabButton>
+        <FlatTabButton active={preview === 'preview'} onClick={() => setPreview('preview')}> {t("preview")} </FlatTabButton>
+        <FlatTabButton active={preview === 'comparison'} onClick={() => setPreview('comparison')}> {t("comparison")} </FlatTabButton>
+        <div className="flex-grow" />
+        <UploadImageButton />
+        {/* 新增还原服务器版本按钮 */}
         {onRestoreServer && (
           <button
             onClick={() => {
               const ok = confirm(t("restore.server.confirm"));
               if (ok) onRestoreServer();
             }}
-            className="px-3 py-1 rounded bg-theme text-white text-sm"
+            className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-theme px-2 py-1 text-sm text-white transition-colors hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
           >
-            {t("restore.server")}
+            <span>{t("restore.server")}</span>
           </button>
         )}
+        {uploading &&
+          <div className="flex flex-row items-center space-x-2">
+            <Loading type="spin" color="#FC466B" height={16} width={16} />
+            <span className="text-sm text-neutral-500">{t('uploading')}</span>
+          </div>
+        }
+      </FlatInset>
+      <div className={`grid grid-cols-1 gap-0 sm:gap-4 ${preview === 'comparison' ? "lg:grid-cols-2" : ""}`}>
+        <div className={"flex min-w-0 flex-col " + (preview === 'preview' ? "hidden" : "")}>
+          <div
+            className={"relative min-h-[420px] min-w-0 overflow-hidden rounded-none border-0 bg-w"}
+            onDrop={(e) => {
+              e.preventDefault();
+              const editor = editorRef.current;
+              if (!editor) return;
+              const files = Array.from(e.dataTransfer.files);
+              if (!files.length) return;
+              const selection = editor.getSelection();
+              if (!selection) return;
+              setUploading(true);
+              const uploadAll = async () => {
+                for (const file of files) {
+                  await insertImage(file, selection, showAlert);
+                }
+              };
+              void uploadAll().finally(() => setUploading(false));
+            }}
+            onPaste={handlePaste}
+          >
+            <Editor
+              onMount={handleEditorMount}
+              height={height}
+              defaultLanguage="markdown"
+              defaultValue={content}
+              theme={colorMode === "dark" ? "vs-dark" : "light"}
+              options={{
+                wordWrap: "on",
+                fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
+                fontLigatures: false,
+                letterSpacing: 0,
+                fontSize: 14,
+                lineNumbers: "off",
+                accessibilitySupport: "off",
+                unicodeHighlight: { ambiguousCharacters: false },
+                renderWhitespace: "none",
+                renderControlCharacters: false,
+                smoothScrolling: false,
+                minimap: {
+                  enabled: false
+                },
+                dragAndDrop: true,
+                // 修复1：关闭编辑器自定义右键菜单，手机长按唤起系统复制粘贴
+                contextmenu: {
+                  enabled: false
+                },
+                // 修复2：放行系统原生 Ctrl/Cmd + C/V 剪贴快捷键，解决浏览器复制失效
+                keyboard: {
+                  bindings: [
+                    { key: "ctrl+c", command: null },
+                    { key: "ctrl+v", command: null },
+                    { key: "meta+c", command: null },
+                    { key: "meta+v", command: null },
+                  ]
+                }
+              }}
+            />
+          </div>
+        </div>
+        <div
+          className={"min-h-0 overflow-y-auto rounded-none border-0 bg-w px-4 py-4 border-t sm:border-none " + (preview === 'edit' ? "hidden" : "")}
+          style={{ height: height }}
+        >
+          <Markdown content={content ? content : placeholder} />
+        </div>
       </div>
-      <Editor
-        height={height}
-        value={content}
-        language="markdown"
-        onChange={(v) => setContent(v ?? "")}
-        onMount={handleEditorDidMount}
-        options={{
-          minimap: { enabled: false },
-          contextmenu: { enabled: false },
-          mouseWheelZoom: false,
-          selectionClipboard: true,
-          keyboard: {
-            bindings: [
-              { key: "ctrl+c", command: null },
-              { key: "ctrl+v", command: null },
-              { key: "meta+c", command: null },
-              { key: "meta+v", command: null },
-            ],
-          },
-          wordWrap: "on",
-          fontSize: 15,
-          padding: { top: 12, bottom: 12 },
-        }}
-      />
+      <AlertUI />
     </div>
   );
 }
