@@ -16,101 +16,45 @@ import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
 
 // ---------- 发布 / 更新逻辑 ----------
-async function publish({
-  title,
-  alias,
-  listed,
-  content,
-  summary,
-  tags,
-  draft,
-  loginRequired,
-  createdAt,
-  onCompleted,
-  showAlert
-}: {
-  title: string;
-  listed: boolean;
-  content: string;
-  summary: string;
-  tags: string[];
-  draft: boolean;
-  loginRequired: boolean;
-  alias?: string;
-  createdAt?: Date;
-  onCompleted?: () => void;
-  showAlert: ShowAlertType;
-}) {
+async function publish({ ... }) {
   const t = i18n.t
-  const { data, error } = await client.feed.create({
-    title,
-    alias,
-    content,
-    summary,
-    tags,
-    listed,
-    draft,
-    loginRequired,
-    createdAt: createdAt?.toISOString(),
-  });
+  const { data, error } = await client.feed.create({ ... });
+  
+  // ✅ 成功时清除缓存
+  if (data) {
+    Cache.with().clear();
+  }
+  
   if (onCompleted) onCompleted();
+  
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   }
   if (data) {
     showAlert(t("publish.success"), () => {
       window.location.href = "/feed/" + data.insertedId;
-      queueMicrotask(() => Cache.with().clear());
+      // 不再需要清理
     });
   }
 }
 
-async function update({
-  id,
-  title,
-  alias,
-  content,
-  summary,
-  tags,
-  listed,
-  draft,
-  loginRequired,
-  createdAt,
-  onCompleted,
-  showAlert
-}: {
-  id: number;
-  listed: boolean;
-  title?: string;
-  alias?: string;
-  content?: string;
-  summary?: string;
-  tags?: string[];
-  draft?: boolean;
-  loginRequired?: boolean;
-  createdAt?: Date;
-  onCompleted?: () => void;
-  showAlert: ShowAlertType;
-}) {
+async function update({ ... }) {
   const t = i18n.t
-  const { error } = await client.feed.update(id, {
-    title,
-    alias,
-    content,
-    summary,
-    tags,
-    listed,
-    draft,
-    loginRequired,
-    createdAt: createdAt?.toISOString(),
-  });
-  if (onCompleted) onCompleted();
+  const { error } = await client.feed.update(id, { ... });
+  
+  // ✅ 成功时立刻清除缓存，避免后续对比
+  if (!error) {
+    Cache.with(id).clear();
+  }
+  
+  if (onCompleted) onCompleted();   // 此时缓存已清，publishing 变 false 不会触发对比
+  
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
       window.location.href = "/feed/" + id;
-      queueMicrotask(() => Cache.with(id).clear());
+      // 此处不再需要清除缓存（已做）
     });
   }
 }
