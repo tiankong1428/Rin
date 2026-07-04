@@ -16,8 +16,6 @@ interface MarkdownEditorProps {
   onRestoreServer?: () => void;
 }
 
-type UploadDialogMode = "local" | "link";
-
 /** 根据文件类型生成对应的 Markdown 或 HTML 片段 */
 function getFileMarkdown(fileName: string, url: string, mimeType?: string, extra?: any): string {
   const type = mimeType || "";
@@ -61,133 +59,70 @@ export function MarkdownEditor({
   const colorMode = useColorMode();
   const vditorRef = useRef<Vditor | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isComposingRef = useRef(false);
   const [uploading, setUploading] = useState(false);
-  const { showAlert, AlertUI, showModal, closeModal } = useAlert();
+  const { showAlert, AlertUI, close } = useAlert();
 
   const cleanupRef = useRef<(() => void) | null>(null);
   const vditorReadyRef = useRef(false);
 
-  // 弹窗状态
-  const [dialogMode, setDialogMode] = useState<UploadDialogMode>("local");
-  const [inputFileUrl, setInputFileUrl] = useState("");
-  const [inputFileName, setInputFileName] = useState("");
-
   // 清空编辑器
   const handleClear = () => {
     if (!vditorReadyRef.current) return;
-    if (window.confirm(t("confirmClear", "确认清空编辑器内容吗？"))) {
+    if (window.confirm(t("confirmClear"))) {
       vditorRef.current?.setValue("");
       setContent("");
     }
   };
 
-  // 插入外部链接文件
-  const insertExternalFileLink = () => {
-    if (!inputFileUrl.trim()) return showAlert(t("upload.link.emptyUrl"));
-    if (!inputFileName.trim()) return showAlert(t("upload.link.emptyName"));
-    const mime = guessMimeByFileName(inputFileName);
-    const md = getFileMarkdown(inputFileName, inputFileUrl, mime);
+  // 统一上传文件处理
+  const handleUploadFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const result = await uploadImageFile(file);
+        const markdown = getFileMarkdown(file.name, result.url, file.type, {
+          blurhash: (result as any).blurhash,
+          width: (result as any).width,
+          height: (result as any).height,
+        });
+        vditorRef.current?.insertValue(markdown);
+      }
+    } catch (err) {
+      console.error(err);
+      showAlert(err instanceof Error ? err.message : t("upload.failed"));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // 打开本地文件选择
+  const openLocalUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  // 外部链接弹窗提示（无自定义弹窗，用alert替代）
+  const openLinkUpload = () => {
+    const name = window.prompt(t("upload.link.fileNamePlaceholder"));
+    if (!name?.trim()) return showAlert(t("upload.link.emptyName"));
+    const url = window.prompt(t("upload.link.urlPlaceholder"));
+    if (!url?.trim()) return showAlert(t("upload.link.emptyUrl"));
+    const mime = guessMimeByFileName(name);
+    const md = getFileMarkdown(name, url, mime);
     vditorRef.current?.insertValue(md);
-    // 清空输入框
-    setInputFileUrl("");
-    setInputFileName("");
-    closeModal();
   };
 
-  // 打开上传选择弹窗
+  // 上传入口切换
   const openUploadSelectDialog = () => {
-    setDialogMode("local");
-    setInputFileUrl("");
-    setInputFileName("");
-    showModal({
-      title: t("upload.selectMode"),
-      width: 520,
-      content: (
-        <div className="space-y-4">
-          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-700 dark:text-amber-200">
-            {t("upload.largeFileTip")}
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setDialogMode("local")}
-              className={`flex-1 py-2 rounded-lg border ${dialogMode === "local" ? "border-theme bg-theme/10" : "border-neutral-200 dark:border-neutral-700"}`}
-            >
-              {t("upload.localFile")}
-            </button>
-            <button
-              onClick={() => setDialogMode("link")}
-              className={`flex-1 py-2 rounded-lg border ${dialogMode === "link" ? "border-theme bg-theme/10" : "border-neutral-200 dark:border-neutral-700"}`}
-            >
-              {t("upload.inputLink")}
-            </button>
-          </div>
-
-          {dialogMode === "link" ? (
-            <div className="space-y-3">
-              <Input
-                value={inputFileName}
-                setValue={setInputFileName}
-                placeholder={t("upload.link.fileNamePlaceholder")}
-                variant="flat"
-              />
-              <Input
-                value={inputFileUrl}
-                setValue={setInputFileUrl}
-                placeholder={t("upload.link.urlPlaceholder")}
-                variant="flat"
-              />
-              <button
-                onClick={insertExternalFileLink}
-                className="w-full rounded-lg bg-theme text-white py-2"
-              >
-                {t("confirm")}
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm text-neutral-500 mb-3">{t("upload.localTip")}</p>
-              <input
-                ref={(el) => {
-                  if (el) {
-                    el.onchange = async (e) => {
-                      const files = Array.from(e.target.files || []);
-                      if (!files.length) return;
-                      setUploading(true);
-                      try {
-                        for (const file of files) {
-                          const result = await uploadImageFile(file);
-                          const markdown = getFileMarkdown(file.name, result.url, file.type, {
-                            blurhash: (result as any).blurhash,
-                            width: (result as any).width,
-                            height: (result as any).height,
-                          });
-                          vditorRef.current?.insertValue(markdown);
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        showAlert(err instanceof Error ? err.message : t("upload.failed"));
-                      } finally {
-                        setUploading(false);
-                        closeModal();
-                        el.value = "";
-                      }
-                    };
-                  }
-                }}
-                type="file"
-                multiple
-                className="block w-full"
-              />
-            </div>
-          )}
-        </div>
-      ),
-      footer: null,
-    });
+    const mode = window.confirm(`${t("upload.largeFileTip")}\n\n${t("upload.localFile")} → 确定\n${t("upload.inputLink")} → 取消`);
+    if (mode) openLocalUpload();
+    else openLinkUpload();
   };
 
-  // 初始化 Vditor（已添加 parse.html: true 修复 <br> 不换行）
+  // 初始化 Vditor（修复parse不存在，改用render.html开启br渲染）
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -201,8 +136,8 @@ export function MarkdownEditor({
           mode: "ir",
           placeholder,
           theme: colorMode === "dark" ? "dark" : "classic",
-          // 核心配置：开启HTML解析，<br>正常渲染换行
-          parse: {
+          // 修复：旧Vditor无parse，使用render.html开启HTML标签解析，<br>正常换行
+          render: {
             html: true,
           },
           toolbar: [
@@ -293,7 +228,7 @@ export function MarkdownEditor({
             <span>复原</span>
           </button>
         )}
-        {/* 自定义上传按钮，打开选择弹窗 */}
+        {/* 自定义上传按钮 */}
         <button
           onClick={openUploadSelectDialog}
           disabled={uploading}
@@ -321,6 +256,20 @@ export function MarkdownEditor({
         style={{ height }}
       >
         <div ref={editorContainerRef} className="vditor-container" style={{ height: "100%" }} />
+        {/* 隐藏本地文件输入框，修复类型报错 */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const target = e.target as HTMLInputElement;
+            const files = target.files;
+            if (!files) return;
+            const fileList = Array.from(files) as File[];
+            void handleUploadFiles(fileList);
+          }}
+        />
       </div>
       <AlertUI />
     </div>
