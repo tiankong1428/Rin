@@ -1,6 +1,6 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import { useCallback, useContext, useEffect, useState, useRef } from "react";
+import { useCallback, useContext, useEffect, useState, useRef, useMemo } from "react";
 import { ProfileContext } from '../state/profile';
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -67,7 +67,7 @@ async function publish({
   if (data) {
     showAlert(t("publish.success"), () => {
       window.location.href = "/feed/" + data.insertedId;
-      // 缓存已在上面清除，无需再次操作
+      // 缓存已在上面清除
     });
   }
 }
@@ -133,7 +133,10 @@ async function update({
 export function WritingPage({ id }: { id?: number }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
-  const cache = Cache.with(id);
+  
+  // 稳定 cache 引用，避免依赖变化导致 effect 重复执行
+  const cache = useMemo(() => Cache.with(id), [id]);
+  
   const [title, setTitle] = cache.useCache("title", "");
   const [summary, setSummary] = cache.useCache("summary", "");
   const [tags, setTags] = cache.useCache("tags", "");
@@ -150,7 +153,7 @@ export function WritingPage({ id }: { id?: number }) {
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
 
-  // 提交操作锁：发布全程屏蔽版本对比弹窗
+  // 提交操作锁
   const isSubmitProcessing = useRef(false);
   const [initLock, setInitLock] = useState(true);
   const [cacheReady, setCacheReady] = useState(false);
@@ -242,12 +245,12 @@ export function WritingPage({ id }: { id?: number }) {
     else if (pageError === "Login required") setPageError(null);
   }, [profile, pageError]);
 
-  // ---------- 拉取文章数据（仅编辑模式 id 存在才请求） ----------
+  // ---------- 拉取文章数据（仅编辑模式，且 id/cache 稳定时请求一次） ----------
   useEffect(() => {
     if (!id) return;
     client.feed.get(id).then(({ data, error }) => {
       if (error) {
-        setPageError(typeof error === "string" ? error : t("request.failed"));
+        setPageError(typeof error === "string" ? error : i18n.t("request.failed"));
         return;
       }
       if (data) {
@@ -263,11 +266,11 @@ export function WritingPage({ id }: { id?: number }) {
         }
       }
     });
-  }, [id, cache, t]);
+    // 仅依赖 id 和稳定的 cache 引用，不会因其他无关状态变化重复请求
+  }, [id, cache]);
 
   // ---------- 草稿对比 / 服务器数据覆盖逻辑 ----------
   useEffect(() => {
-    // 正在提交发布，直接跳过所有对比逻辑
     if (isSubmitProcessing.current) return;
     if (!id) return;
     if (!feedData || initLock || !cacheReady || publishing) return;
@@ -278,7 +281,6 @@ export function WritingPage({ id }: { id?: number }) {
     }
 
     const localModifiedAt = cache.getModifiedAt();
-    // 本地无草稿直接退出，不弹窗、不回填
     if (localModifiedAt === null) return;
 
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
@@ -303,7 +305,7 @@ export function WritingPage({ id }: { id?: number }) {
     setDraft(!!feedData.draft);
     setLoginRequired(!!feedData.loginRequired);
     if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-  }, [feedData, profile, initLock, cacheReady, id, publishing]);
+  }, [feedData, profile, initLock, cacheReady, id, publishing, isAdmin, cache]);
 
   // mermaid 渲染防抖
   const debouncedUpdate = useCallback(
