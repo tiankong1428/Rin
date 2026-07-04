@@ -1,7 +1,7 @@
 import { useRef, useState, useLayoutEffect, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from "react-loading";
-import { FlatInset, Input } from "@rin/ui";
+import { FlatInset } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
@@ -62,7 +62,7 @@ export function MarkdownEditor({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isComposingRef = useRef(false);
   const [uploading, setUploading] = useState(false);
-  const { showAlert, AlertUI, close } = useAlert();
+  const { showAlert, AlertUI } = useAlert();
 
   const cleanupRef = useRef<(() => void) | null>(null);
   const vditorReadyRef = useRef(false);
@@ -104,7 +104,7 @@ export function MarkdownEditor({
     fileInputRef.current?.click();
   };
 
-  // 外部链接弹窗提示（无自定义弹窗，用alert替代）
+  // 外部链接弹窗提示
   const openLinkUpload = () => {
     const name = window.prompt(t("upload.link.fileNamePlaceholder"));
     if (!name?.trim()) return showAlert(t("upload.link.emptyName"));
@@ -122,7 +122,7 @@ export function MarkdownEditor({
     else openLinkUpload();
   };
 
-  // 初始化 Vditor（修复parse不存在，改用render.html开启br渲染）
+  // 初始化 Vditor
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -136,10 +136,7 @@ export function MarkdownEditor({
           mode: "ir",
           placeholder,
           theme: colorMode === "dark" ? "dark" : "classic",
-          // 修复：旧Vditor无parse，使用render.html开启HTML标签解析，<br>正常换行
-          render: {
-            html: true,
-          },
+          htmlParse: true, // 开启HTML解析，<br>正常渲染换行，兼容旧版Vditor
           toolbar: [
             "headings", "bold", "italic", "strike", "link", "|",
             "list", "ordered-list", "check", "outdent", "indent", "|",
@@ -256,7 +253,7 @@ export function MarkdownEditor({
         style={{ height }}
       >
         <div ref={editorContainerRef} className="vditor-container" style={{ height: "100%" }} />
-        {/* 隐藏本地文件输入框，修复类型报错 */}
+        {/* 隐藏本地文件输入框 */}
         <input
           ref={fileInputRef}
           type="file"
