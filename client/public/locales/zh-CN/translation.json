@@ -736,8 +736,8 @@
     "link": {
       "emptyUrl": "请输入文件链接地址",
       "emptyName": "请填写文件名称",
-      "fileNamePlaceholder": "文件名称（用于展示）",
-      "urlPlaceholder": "https://xxx/file.zip"
+      "fileNamePlaceholder": "请输入文件名称（用于展示）",
+      "urlPlaceholder": "请输入文件链接"
     },
     "failed": "上传失败"
   },
