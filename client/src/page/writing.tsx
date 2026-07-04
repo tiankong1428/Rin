@@ -1,6 +1,6 @@
 import i18n from 'i18next';
 import _ from 'lodash';
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState, useRef } from "react";
 import { ProfileContext } from '../state/profile';
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -59,7 +59,6 @@ async function publish({
   }
   if (data) {
     showAlert(t("publish.success"), () => {
-      // 先跳转，延迟清缓存
       window.location.href = "/feed/" + data.insertedId;
       queueMicrotask(() => Cache.with().clear());
     });
@@ -110,7 +109,6 @@ async function update({
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
-      // 先跳转页面，再清空缓存
       window.location.href = "/feed/" + id;
       queueMicrotask(() => Cache.with(id).clear());
     });
@@ -138,6 +136,8 @@ export function WritingPage({ id }: { id?: number }) {
   const profile = useContext(ProfileContext);
   const isAdmin = profile?.permission ?? false;
 
+  // 提交操作锁：发布全程屏蔽版本对比弹窗
+  const isSubmitProcessing = useRef(false);
   const [initLock, setInitLock] = useState(true);
   const [cacheReady, setCacheReady] = useState(false);
 
@@ -174,6 +174,8 @@ export function WritingPage({ id }: { id?: number }) {
   function publishButton() {
     if (publishing) return;
     const tagsplit = tags.split("#").filter(tag => tag.trim()).map(tag => tag.trim());
+    isSubmitProcessing.current = true;
+
     if (id !== undefined) {
       setPublishing(true);
       update({
@@ -187,7 +189,12 @@ export function WritingPage({ id }: { id?: number }) {
         draft,
         loginRequired,
         createdAt,
-        onCompleted: () => setPublishing(false),
+        onCompleted: () => {
+          setPublishing(false);
+          setTimeout(() => {
+            isSubmitProcessing.current = false;
+          }, 500);
+        },
         showAlert
       });
     } else {
@@ -204,7 +211,12 @@ export function WritingPage({ id }: { id?: number }) {
         listed,
         loginRequired,
         createdAt,
-        onCompleted: () => setPublishing(false),
+        onCompleted: () => {
+          setPublishing(false);
+          setTimeout(() => {
+            isSubmitProcessing.current = false;
+          }, 500);
+        },
         showAlert
       });
     }
@@ -219,7 +231,6 @@ export function WritingPage({ id }: { id?: number }) {
 
   // ---------- 拉取文章数据（仅编辑模式id存在才请求） ----------
   useEffect(() => {
-    // 新建写作 id 不存在，不请求接口
     if (!id) return;
     client.feed.get(id).then(({ data, error }) => {
       if (error) {
@@ -241,51 +252,47 @@ export function WritingPage({ id }: { id?: number }) {
     });
   }, [id, cache, t]);
 
-  // ---------- 草稿对比弹窗逻辑（新增：发布中直接跳过，避免弹窗提前弹出） ----------
   // ---------- 草稿对比 / 服务器数据覆盖逻辑 ----------
-useEffect(() => {
-  // 新建文章无id直接跳过
-  if (!id) return;
-  // 发布中、无服务器数据、锁未解锁、缓存未就绪直接跳过
-  if (!feedData || initLock || !cacheReady || publishing) return;
-  if (profile === undefined || profile === null) return;
+  useEffect(() => {
+    // 正在提交发布，直接跳过所有对比逻辑
+    if (isSubmitProcessing.current) return;
+    if (!id) return;
+    if (!feedData || initLock || !cacheReady || publishing) return;
+    if (profile === undefined || profile === null) return;
 
-  if (feedData.uid !== profile.id && !isAdmin) {
-    setPageError("无权限编辑此文章");
-    return;
-  }
-
-  const localModifiedAt = cache.getModifiedAt();
-  // ========== 新增这一行 ==========
-  // 本地草稿已清空（发布完成），直接退出，不做任何对比弹窗
-  if (localModifiedAt === null) return;
-
-  const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
-
-  // 本地有草稿，且服务器更新时间更新，才弹确认框
-  if (serverUpdatedAt > localModifiedAt) {
-    const useServer = confirm(
-      "检测到服务器上有更新的版本。\n\n" +
-      "点击「确定」：加载服务器最新版本\n" +
-      "点击「取消」：继续编辑本地草稿"
-    );
-    if (useServer) {
-      if (feedData.title) setTitle(feedData.title);
-      if (feedData.content) setContent(feedData.content);
-      if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
-      if ((feedData as any).alias) setAlias((feedData as any).alias);
-      if ((feedData as any).summary) setSummary((feedData as any).summary || "");
-      cache.touchModifiedAt();
+    if (feedData.uid !== profile.id && !isAdmin) {
+      setPageError("无权限编辑此文章");
+      return;
     }
-    return;
-  }
 
-  // 本地有草稿且服务器无更新，直接同步基础状态，不覆盖内容
-  setListed(!!feedData.listed);
-  setDraft(!!feedData.draft);
-  setLoginRequired(!!feedData.loginRequired);
-  if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
-}, [feedData, profile, initLock, cacheReady, id, publishing]);
+    const localModifiedAt = cache.getModifiedAt();
+    // 本地无草稿直接退出，不弹窗、不回填
+    if (localModifiedAt === null) return;
+
+    const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
+
+    if (serverUpdatedAt > localModifiedAt) {
+      const useServer = confirm(
+        "检测到服务器上有更新的版本。\n\n" +
+        "点击「确定」：加载服务器最新版本\n" +
+        "点击「取消」：继续编辑本地草稿"
+      );
+      if (useServer) {
+        if (feedData.title) setTitle(feedData.title);
+        if (feedData.content) setContent(feedData.content);
+        if (feedData.hashtags) setTags(feedData.hashtags.map((item: { name: string }) => `#${item.name}`).join(" "));
+        if ((feedData as any).alias) setAlias((feedData as any).alias);
+        if ((feedData as any).summary) setSummary((feedData as any).summary || "");
+        queueMicrotask(() => cache.touchModifiedAt());
+      }
+      return;
+    }
+
+    setListed(!!feedData.listed);
+    setDraft(!!feedData.draft);
+    setLoginRequired(!!feedData.loginRequired);
+    if (feedData.createdAt) setCreatedAt(new Date(feedData.createdAt));
+  }, [feedData, profile, initLock, cacheReady, id, publishing]);
 
   // mermaid 渲染防抖
   const debouncedUpdate = useCallback(
@@ -472,8 +479,7 @@ useEffect(() => {
     );
   }
 
-  // ---------- 渲染区分新建/编辑 ----------
-  // 新建写作页面 直接渲染编辑器，不等待feedData
+  // 新建写作页直接渲染编辑器，不加载loading
   if (!id) {
     return (
       <>
@@ -501,7 +507,7 @@ useEffect(() => {
     );
   }
 
-  // 编辑模式，等待接口加载完成
+  // 编辑模式等待接口加载
   return (
     <>
       <Helmet>
