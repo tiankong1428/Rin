@@ -16,45 +16,115 @@ import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
 
 // ---------- 发布 / 更新逻辑 ----------
-async function publish({ ... }) {
-  const t = i18n.t
-  const { data, error } = await client.feed.create({ ... });
-  
-  // ✅ 成功时清除缓存
+async function publish({
+  title,
+  alias,
+  listed,
+  content,
+  summary,
+  tags,
+  draft,
+  loginRequired,
+  createdAt,
+  onCompleted,
+  showAlert,
+}: {
+  title: string;
+  listed: boolean;
+  content: string;
+  summary: string;
+  tags: string[];
+  draft: boolean;
+  loginRequired: boolean;
+  alias?: string;
+  createdAt?: Date;
+  onCompleted?: () => void;
+  showAlert: ShowAlertType;
+}) {
+  const t = i18n.t;
+  const { data, error } = await client.feed.create({
+    title,
+    alias,
+    content,
+    summary,
+    tags,
+    listed,
+    draft,
+    loginRequired,
+    createdAt: createdAt?.toISOString(),
+  });
+
+  // 成功时立即清除缓存，避免后续对比逻辑触发
   if (data) {
     Cache.with().clear();
   }
-  
+
   if (onCompleted) onCompleted();
-  
+
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   }
   if (data) {
     showAlert(t("publish.success"), () => {
       window.location.href = "/feed/" + data.insertedId;
-      // 不再需要清理
+      // 缓存已在上面清除，无需再次操作
     });
   }
 }
 
-async function update({ ... }) {
-  const t = i18n.t
-  const { error } = await client.feed.update(id, { ... });
-  
-  // ✅ 成功时立刻清除缓存，避免后续对比
+async function update({
+  id,
+  title,
+  alias,
+  content,
+  summary,
+  tags,
+  listed,
+  draft,
+  loginRequired,
+  createdAt,
+  onCompleted,
+  showAlert,
+}: {
+  id: number;
+  listed: boolean;
+  title?: string;
+  alias?: string;
+  content?: string;
+  summary?: string;
+  tags?: string[];
+  draft?: boolean;
+  loginRequired?: boolean;
+  createdAt?: Date;
+  onCompleted?: () => void;
+  showAlert: ShowAlertType;
+}) {
+  const t = i18n.t;
+  const { error } = await client.feed.update(id, {
+    title,
+    alias,
+    content,
+    summary,
+    tags,
+    listed,
+    draft,
+    loginRequired,
+    createdAt: createdAt?.toISOString(),
+  });
+
+  // 成功时立即清除缓存，避免后续对比逻辑触发
   if (!error) {
     Cache.with(id).clear();
   }
-  
-  if (onCompleted) onCompleted();   // 此时缓存已清，publishing 变 false 不会触发对比
-  
+
+  if (onCompleted) onCompleted();
+
   if (error) {
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
       window.location.href = "/feed/" + id;
-      // 此处不再需要清除缓存（已做）
+      // 缓存已在上面清除
     });
   }
 }
@@ -119,7 +189,6 @@ export function WritingPage({ id }: { id?: number }) {
     if (publishing) return;
     const tagsplit = tags.split("#").filter(tag => tag.trim()).map(tag => tag.trim());
     isSubmitProcessing.current = true;
-
     if (id !== undefined) {
       setPublishing(true);
       update({
@@ -139,7 +208,7 @@ export function WritingPage({ id }: { id?: number }) {
             isSubmitProcessing.current = false;
           }, 500);
         },
-        showAlert
+        showAlert,
       });
     } else {
       if (!title.trim()) return showAlert(t("title.empty"));
@@ -161,7 +230,7 @@ export function WritingPage({ id }: { id?: number }) {
             isSubmitProcessing.current = false;
           }, 500);
         },
-        showAlert
+        showAlert,
       });
     }
   }
@@ -173,7 +242,7 @@ export function WritingPage({ id }: { id?: number }) {
     else if (pageError === "Login required") setPageError(null);
   }, [profile, pageError]);
 
-  // ---------- 拉取文章数据（仅编辑模式id存在才请求） ----------
+  // ---------- 拉取文章数据（仅编辑模式 id 存在才请求） ----------
   useEffect(() => {
     if (!id) return;
     client.feed.get(id).then(({ data, error }) => {
@@ -203,7 +272,6 @@ export function WritingPage({ id }: { id?: number }) {
     if (!id) return;
     if (!feedData || initLock || !cacheReady || publishing) return;
     if (profile === undefined || profile === null) return;
-
     if (feedData.uid !== profile.id && !isAdmin) {
       setPageError("无权限编辑此文章");
       return;
@@ -214,7 +282,6 @@ export function WritingPage({ id }: { id?: number }) {
     if (localModifiedAt === null) return;
 
     const serverUpdatedAt = new Date(feedData.updatedAt).getTime();
-
     if (serverUpdatedAt > localModifiedAt) {
       const useServer = confirm(
         "检测到服务器上有更新的版本。\n\n" +
@@ -242,18 +309,23 @@ export function WritingPage({ id }: { id?: number }) {
   const debouncedUpdate = useCallback(
     _.debounce(() => {
       mermaid.initialize({ startOnLoad: false, theme: "default" });
-      mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_default") })
+      mermaid.run({
+        suppressErrors: true,
+        nodes: document.querySelectorAll("pre.mermaid_default"),
+      })
         .then(() => {
           mermaid.initialize({ startOnLoad: false, theme: "dark" });
-          mermaid.run({ suppressErrors: true, nodes: document.querySelectorAll("pre.mermaid_dark") });
-        })
+          mermaid.run({
+            suppressErrors: true,
+            nodes: document.querySelectorAll("pre.mermaid_dark"),
+          });
+        });
     }, 100),
     []
   );
-
   useEffect(() => debouncedUpdate(), [content, debouncedUpdate]);
 
-  // 发布按钮UI
+  // 发布按钮 UI
   function PublishButton({ className }: { className?: string }) {
     return (
       <button
@@ -280,78 +352,35 @@ export function WritingPage({ id }: { id?: number }) {
           </div>
           <PublishButton className="w-auto" />
         </div>
-
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
-            <Input
-              id={id}
-              value={title}
-              setValue={setTitle}
-              placeholder={t("title")}
-              variant="flat"
-              className="text-base"
-            />
+            <Input id={id} value={title} setValue={setTitle} placeholder={t("title")} variant="flat" className="text-base" />
           </div>
-          <Input
-            id={id}
-            value={summary}
-            setValue={setSummary}
-            placeholder={t("summary")}
-            variant="flat"
-          />
-          <Input
-            id={id}
-            value={alias}
-            setValue={setAlias}
-            placeholder={t("alias")}
-            variant="flat"
-          />
-          <Input
-            id={id}
-            value={tags}
-            setValue={setTags}
-            placeholder={t("tags")}
-            variant="flat"
-            className="lg:col-span-2"
-          />
+          <Input id={id} value={summary} setValue={setSummary} placeholder={t("summary")} variant="flat" />
+          <Input id={id} value={alias} setValue={setAlias} placeholder={t("alias")} variant="flat" />
+          <Input id={id} value={tags} setValue={setTags} placeholder={t("tags")} variant="flat" className="lg:col-span-2" />
         </div>
-
         <div className="mt-5 grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(18rem,2fr)]">
           <FlatMetaRow
             className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setDraft(!draft)}
           >
             <p>{t('visible.self_only')}</p>
-            <Checkbox
-              id="draft"
-              value={draft}
-              setValue={setDraft}
-              placeholder={t('draft')}
-            />
+            <Checkbox id="draft" value={draft} setValue={setDraft} placeholder={t('draft')} />
           </FlatMetaRow>
           <FlatMetaRow
             className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setListed(!listed)}
           >
             <p>{t('listed')}</p>
-            <Checkbox
-              id="listed"
-              value={listed}
-              setValue={setListed}
-              placeholder={t('listed')}
-            />
+            <Checkbox id="listed" value={listed} setValue={setListed} placeholder={t('listed')} />
           </FlatMetaRow>
           <FlatMetaRow
             className="cursor-pointer rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3"
             onClick={() => setLoginRequired(!loginRequired)}
           >
             <p>仅登录可见</p>
-            <Checkbox
-              id="loginRequired"
-              value={loginRequired}
-              setValue={setLoginRequired}
-              placeholder="仅登录可见"
-            />
+            <Checkbox id="loginRequired" value={loginRequired} setValue={setLoginRequired} placeholder="仅登录可见" />
           </FlatMetaRow>
           {isAdmin && (
             <FlatMetaRow className="gap-3 rounded-none border-0 bg-transparent px-0 py-2 sm:rounded-2xl sm:border sm:bg-secondary sm:px-4 sm:py-3 xl:col-span-1">
@@ -361,7 +390,7 @@ export function WritingPage({ id }: { id?: number }) {
           )}
         </div>
       </FlatPanel>
-    )
+    );
   }
 
   // 错误页面
@@ -369,7 +398,6 @@ export function WritingPage({ id }: { id?: number }) {
     const isLoginRequired = pageError === "Login required";
     const isNotFound = pageError === "Not found";
     const isPermissionDenied = pageError.includes("无权限");
-
     let title = pageError;
     let desc = "";
     let showLoginButton = false;
@@ -423,7 +451,7 @@ export function WritingPage({ id }: { id?: number }) {
     );
   }
 
-  // 新建写作页直接渲染编辑器，不加载loading
+  // 新建写作页直接渲染编辑器，不加载 loading
   if (!id) {
     return (
       <>
@@ -438,12 +466,7 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="mt-2 flex flex-col gap-4 sm:gap-6">
           <MetaInput className="p-4 sm:p-5 md:p-6" />
           <FlatPanel className="overflow-hidden p-0">
-            <MarkdownEditor
-              content={content}
-              setContent={setContent}
-              height='680px'
-              onRestoreServer={handleRestoreServer}
-            />
+            <MarkdownEditor content={content} setContent={setContent} height='680px' onRestoreServer={handleRestoreServer} />
           </FlatPanel>
         </div>
         <AlertUI />
@@ -470,12 +493,7 @@ export function WritingPage({ id }: { id?: number }) {
         <div className="mt-2 flex flex-col gap-4 sm:gap-6">
           <MetaInput className="p-4 sm:p-5 md:p-6" />
           <FlatPanel className="overflow-hidden p-0">
-            <MarkdownEditor
-              content={content}
-              setContent={setContent}
-              height='680px'
-              onRestoreServer={handleRestoreServer}
-            />
+            <MarkdownEditor content={content} setContent={setContent} height='680px' onRestoreServer={handleRestoreServer} />
           </FlatPanel>
         </div>
       )}
