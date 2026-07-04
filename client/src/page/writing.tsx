@@ -59,8 +59,9 @@ async function publish({
   }
   if (data) {
     showAlert(t("publish.success"), () => {
-      Cache.with().clear();
+      // 先跳转，延迟清缓存
       window.location.href = "/feed/" + data.insertedId;
+      queueMicrotask(() => Cache.with().clear());
     });
   }
 }
@@ -109,8 +110,9 @@ async function update({
     showAlert(typeof error === "string" ? error : t("upload.failed"));
   } else {
     showAlert(t("update.success"), () => {
-      Cache.with(id).clear();
+      // 先跳转页面，再清空缓存
       window.location.href = "/feed/" + id;
+      queueMicrotask(() => Cache.with(id).clear());
     });
   }
 }
