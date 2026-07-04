@@ -724,5 +724,22 @@
   "sort_latest": "最新",
   "sort_popular": "热门",
   "total_tags": "共 {{count}} 个标签",
-  "anonymous": "匿名"
+  "anonymous": "匿名",
+  {
+  "confirmClear": "确认清空编辑器内容吗？",
+  "upload.title": "上传文件",
+  "upload.selectMode": "选择文件添加方式",
+  "upload.localFile": "上传本地文件",
+  "upload.inputLink": "填入外部文件链接",
+  "upload.largeFileTip": "提示：大文件建议上传至图床/云盘，填入外部链接分享，避免占用本站存储空间",
+  "upload.localTip": "选择本地文件，将上传至本站服务器",
+  "upload.link.emptyUrl": "请输入文件链接地址",
+  "upload.link.emptyName": "请填写文件名称",
+  "upload.link.fileNamePlaceholder": "文件名称（用于展示）",
+  "upload.link.urlPlaceholder": "https://xxx/file.zip",
+  "upload.failed": "上传失败",
+  "uploading": "上传中",
+  "clear": "清空",
+  "confirm": "确认"
+}
 }
