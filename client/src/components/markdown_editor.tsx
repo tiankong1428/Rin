@@ -48,6 +48,11 @@ const guessMimeByFileName = (filename: string): string => {
   return "application/octet-stream";
 };
 
+// 将 <br> / <br/> 替换为markdown硬换行
+const replaceBrToLineBreak = (text: string): string => {
+  return text.replace(/<br\s*\/?>/gi, "  \n");
+};
+
 export function MarkdownEditor({
   content,
   setContent,
@@ -104,7 +109,7 @@ export function MarkdownEditor({
     fileInputRef.current?.click();
   };
 
-  // 外部链接弹窗提示
+  // 外部链接输入
   const openLinkUpload = () => {
     const name = window.prompt(t("upload.link.fileNamePlaceholder"));
     if (!name?.trim()) return showAlert(t("upload.link.emptyName"));
@@ -115,14 +120,14 @@ export function MarkdownEditor({
     vditorRef.current?.insertValue(md);
   };
 
-  // 上传入口切换
+  // 上传弹窗选择
   const openUploadSelectDialog = () => {
     const mode = window.confirm(`${t("upload.largeFileTip")}\n\n${t("upload.localFile")} → 确定\n${t("upload.inputLink")} → 取消`);
     if (mode) openLocalUpload();
     else openLinkUpload();
   };
 
-  // 初始化 Vditor
+  // 初始化 Vditor（移除所有不存在的html解析配置，无多余字段）
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -136,7 +141,6 @@ export function MarkdownEditor({
           mode: "ir",
           placeholder,
           theme: colorMode === "dark" ? "dark" : "classic",
-          htmlParse: true, // 开启HTML解析，<br>正常渲染换行，兼容旧版Vditor
           toolbar: [
             "headings", "bold", "italic", "strike", "link", "|",
             "list", "ordered-list", "check", "outdent", "indent", "|",
@@ -149,8 +153,14 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
-          input: (value) => {
-            if (!isComposingRef.current) setContent(value);
+          input: (rawValue) => {
+            if (isComposingRef.current) return;
+            // 自动把所有 <br> 转为标准markdown换行，解决不生效问题
+            const fixed = replaceBrToLineBreak(rawValue);
+            if (fixed !== rawValue) {
+              vditorRef.current?.setValue(fixed);
+            }
+            setContent(fixed);
           },
           after: () => {
             vditorReadyRef.current = true;
@@ -166,13 +176,16 @@ export function MarkdownEditor({
 
         vditorRef.current = vditor;
 
-        // 中文输入法处理
+        // 中文输入法组合文字处理
         const editorEl = container.querySelector(".vditor-ir");
         if (editorEl) {
           const onCompositionStart = () => { isComposingRef.current = true; };
           const onCompositionEnd = () => {
             isComposingRef.current = false;
-            if (vditorRef.current) setContent(vditorRef.current.getValue());
+            if (vditorRef.current) {
+              const val = vditorRef.current.getValue();
+              setContent(replaceBrToLineBreak(val));
+            }
           };
           editorEl.addEventListener("compositionstart", onCompositionStart);
           editorEl.addEventListener("compositionend", onCompositionEnd);
@@ -197,17 +210,19 @@ export function MarkdownEditor({
     };
   }, []);
 
-  // 外部 content 同步
+  // 外部传入content同步到编辑器
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     const vditor = vditorRef.current;
     if (!vditor) return;
-    if (vditor.getValue() !== content) {
-      vditor.setValue(content);
+    const currentVal = vditor.getValue();
+    const fixedInputContent = replaceBrToLineBreak(content);
+    if (currentVal !== fixedInputContent) {
+      vditor.setValue(fixedInputContent);
     }
   }, [content]);
 
-  // 主题切换
+  // 暗黑/浅色主题切换
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     vditorRef.current?.setTheme(colorMode === "dark" ? "dark" : "classic");
@@ -225,7 +240,6 @@ export function MarkdownEditor({
             <span>复原</span>
           </button>
         )}
-        {/* 自定义上传按钮 */}
         <button
           onClick={openUploadSelectDialog}
           disabled={uploading}
@@ -253,7 +267,6 @@ export function MarkdownEditor({
         style={{ height }}
       >
         <div ref={editorContainerRef} className="vditor-container" style={{ height: "100%" }} />
-        {/* 隐藏本地文件输入框 */}
         <input
           ref={fileInputRef}
           type="file"
