@@ -36,7 +36,6 @@ function getFileMarkdown(fileName: string, url: string, mimeType?: string, extra
   }
 }
 
-// 根据文件名后缀推测MIME
 const guessMimeByFileName = (filename: string): string => {
   const ext = filename.split(".").pop()?.toLowerCase();
   const imgExt = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -48,7 +47,6 @@ const guessMimeByFileName = (filename: string): string => {
   return "application/octet-stream";
 };
 
-// 将 <br> / <br/> 替换为markdown硬换行
 const replaceBrToLineBreak = (text: string): string => {
   return text.replace(/<br\s*\/?>/gi, "  \n");
 };
@@ -72,7 +70,6 @@ export function MarkdownEditor({
   const cleanupRef = useRef<(() => void) | null>(null);
   const vditorReadyRef = useRef(false);
 
-  // 清空编辑器
   const handleClear = () => {
     if (!vditorReadyRef.current) return;
     if (window.confirm(t("confirmClear"))) {
@@ -81,7 +78,7 @@ export function MarkdownEditor({
     }
   };
 
-  // 统一上传文件处理
+  // 处理文件上传（本地）
   const handleUploadFiles = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
@@ -104,30 +101,27 @@ export function MarkdownEditor({
     }
   };
 
-  // 打开本地文件选择
+  // 本地上传：打开文件选择
   const openLocalUpload = () => {
     fileInputRef.current?.click();
   };
 
-  // 外部链接输入
+  // 链接上传：通过 URL 和自定义文件名插入
   const openLinkUpload = () => {
     const name = window.prompt(t("upload.link.fileNamePlaceholder"));
-    if (!name?.trim()) return showAlert(t("upload.link.emptyName"));
+    if (name === null) return; // 用户取消，静默退出
+    if (!name.trim()) return showAlert(t("upload.link.emptyName"));
+
     const url = window.prompt(t("upload.link.urlPlaceholder"));
-    if (!url?.trim()) return showAlert(t("upload.link.emptyUrl"));
+    if (url === null) return;
+    if (!url.trim()) return showAlert(t("upload.link.emptyUrl"));
+
     const mime = guessMimeByFileName(name);
     const md = getFileMarkdown(name, url, mime);
     vditorRef.current?.insertValue(md);
   };
 
-  // 上传弹窗选择
-  const openUploadSelectDialog = () => {
-    const mode = window.confirm(`${t("upload.largeFileTip")}\n\n${t("upload.localFile")} → 确定\n${t("upload.inputLink")} → 取消`);
-    if (mode) openLocalUpload();
-    else openLinkUpload();
-  };
-
-  // 初始化 Vditor（移除所有不存在的html解析配置，无多余字段）
+  // 初始化 Vditor
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -153,15 +147,19 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
+
+          // 开启 HTML 渲染，让 <br> 等标签能被即时渲染
+          html: true,
+          render: {
+            html: true,
+          },
+
           input: (rawValue) => {
             if (isComposingRef.current) return;
-            // 自动把所有 <br> 转为标准markdown换行，解决不生效问题
-            const fixed = replaceBrToLineBreak(rawValue);
-            if (fixed !== rawValue) {
-              vditorRef.current?.setValue(fixed);
-            }
-            setContent(fixed);
+            // 直接同步内容，不再做全局 <br> 替换以避免光标跳动
+            setContent(rawValue);
           },
+
           after: () => {
             vditorReadyRef.current = true;
             if (content && vditor) {
@@ -170,6 +168,29 @@ export function MarkdownEditor({
               } catch (e) {
                 console.warn("Vditor setValue failed:", e);
               }
+            }
+
+            // 绑定粘贴事件：处理粘贴内容中的 <br>
+            const editorEl = container.querySelector(".vditor-ir");
+            if (editorEl) {
+              const pasteHandler = (e: ClipboardEvent) => {
+                const text = e.clipboardData?.getData("text/plain");
+                if (text && /<br\s*\/?>/i.test(text)) {
+                  e.preventDefault();
+                  const fixed = replaceBrToLineBreak(text);
+                  vditor.insertValue(fixed);
+                }
+                // 否则保持默认粘贴行为
+              };
+              editorEl.addEventListener("paste", pasteHandler);
+
+              // 记录清理函数
+              cleanupRef.current = () => {
+                editorEl.removeEventListener("paste", pasteHandler);
+                vditor.destroy();
+                vditorRef.current = null;
+                vditorReadyRef.current = false;
+              };
             }
           },
         });
@@ -184,18 +205,18 @@ export function MarkdownEditor({
             isComposingRef.current = false;
             if (vditorRef.current) {
               const val = vditorRef.current.getValue();
-              setContent(replaceBrToLineBreak(val));
+              setContent(val);
             }
           };
           editorEl.addEventListener("compositionstart", onCompositionStart);
           editorEl.addEventListener("compositionend", onCompositionEnd);
 
+          // 合并清理函数
+          const prevCleanup = cleanupRef.current;
           cleanupRef.current = () => {
             editorEl.removeEventListener("compositionstart", onCompositionStart);
             editorEl.removeEventListener("compositionend", onCompositionEnd);
-            vditor.destroy();
-            vditorRef.current = null;
-            vditorReadyRef.current = false;
+            prevCleanup?.();
           };
         }
       } catch (err) {
@@ -210,15 +231,14 @@ export function MarkdownEditor({
     };
   }, []);
 
-  // 外部传入content同步到编辑器
+  // 外部传入 content 同步到编辑器
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     const vditor = vditorRef.current;
     if (!vditor) return;
     const currentVal = vditor.getValue();
-    const fixedInputContent = replaceBrToLineBreak(content);
-    if (currentVal !== fixedInputContent) {
-      vditor.setValue(fixedInputContent);
+    if (currentVal !== content) {
+      vditor.setValue(content);
     }
   }, [content]);
 
@@ -240,13 +260,22 @@ export function MarkdownEditor({
             <span>复原</span>
           </button>
         )}
+        {/* 拆分为两个独立的上传按钮 */}
         <button
-          onClick={openUploadSelectDialog}
+          onClick={openLocalUpload}
           disabled={uploading}
           className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 disabled:opacity-60 dark:border-white/10 dark:hover:border-white/20"
         >
           <i className="ri-upload-2-line" />
-          <span>{t("upload.title")}</span>
+          <span>{t("upload.local") || "本地上传"}</span>
+        </button>
+        <button
+          onClick={openLinkUpload}
+          disabled={uploading}
+          className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-w px-2 py-1 text-sm t-primary transition-colors hover:border-black/20 disabled:opacity-60 dark:border-white/10 dark:hover:border-white/20"
+        >
+          <i className="ri-link" />
+          <span>{t("upload.link") || "链接上传"}</span>
         </button>
         <button
           onClick={handleClear}
