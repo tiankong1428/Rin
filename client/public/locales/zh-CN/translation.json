@@ -727,18 +727,9 @@
     "anonymous": "匿名",
   "confirmClear": "确认清空编辑器内容吗？",
   "upload": {
-    "title": "上传文件",
-    "selectMode": "选择文件添加方式",
-    "localFile": "上传本地文件",
+    "local": "上传文件",
     "inputLink": "填入外部文件链接",
-    "largeFileTip": "提示：大文件建议上传至图床/云盘，填入外部链接分享，避免占用本站存储空间",
-    "localTip": "选择本地文件，将上传至本站服务器",
-    "link": {
-      "emptyUrl": "请输入文件链接地址",
-      "emptyName": "请填写文件名称",
-      "fileNamePlaceholder": "请输入文件名称（用于展示）",
-      "urlPlaceholder": "请输入文件链接"
-    },
+    "link": "在线文件",
     "failed": "上传失败"
   },
   "uploading": "上传中"
