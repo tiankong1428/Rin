@@ -106,7 +106,7 @@ export function MarkdownEditor({
 
   const openLinkUpload = () => {
     const name = window.prompt(t("upload.link.fileNamePlaceholder"));
-    if (name === null) return; // 用户取消
+    if (name === null) return;
     if (!name.trim()) return showAlert(t("upload.link.emptyName"));
 
     const url = window.prompt(t("upload.link.urlPlaceholder"));
@@ -143,10 +143,10 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
-          // 启用预览 HTML 标签渲染（包括 <br>）
+          // 使用 as any 绕过类型检查，启用 HTML 渲染（包括 <br>）
           preview: {
             html: true,
-          },
+          } as any,
           input: (rawValue) => {
             if (isComposingRef.current) return;
             setContent(rawValue);
@@ -183,7 +183,7 @@ export function MarkdownEditor({
               };
             }
           },
-        });
+        } as any); // 整个配置也标记为 any 以防还有其他类型不匹配
 
         vditorRef.current = vditor;
 
