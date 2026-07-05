@@ -143,11 +143,11 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
-          // 使用 as any 绕过类型检查，启用 HTML 渲染（包括 <br>）
+          // 启用 HTML 标签渲染（如 <br>），使用 as any 绕过类型缺失
           preview: {
             html: true,
           } as any,
-          input: (rawValue) => {
+          input: (rawValue: string) => {   // 显式声明参数类型
             if (isComposingRef.current) return;
             setContent(rawValue);
           },
@@ -161,7 +161,7 @@ export function MarkdownEditor({
               }
             }
 
-            // 绑定粘贴事件，处理 <br>
+            // 绑定粘贴事件处理 <br>
             const editorEl = container.querySelector(".vditor-ir") as HTMLElement | null;
             if (editorEl) {
               const pasteHandler = (e: Event) => {
@@ -183,7 +183,7 @@ export function MarkdownEditor({
               };
             }
           },
-        } as any); // 整个配置也标记为 any 以防还有其他类型不匹配
+        } as any); // 整体 as any 避免其他未声明属性报错
 
         vditorRef.current = vditor;
 
