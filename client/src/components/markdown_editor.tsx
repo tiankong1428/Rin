@@ -16,13 +16,11 @@ interface MarkdownEditorProps {
   onRestoreServer?: () => void;
 }
 
-/** 根据文件类型生成对应的 Markdown 或 HTML 片段 */
 function getFileMarkdown(fileName: string, url: string, mimeType?: string, extra?: any): string {
   const type = mimeType || "";
-  const name = fileName;
   const lineBreak = "  \n";
   if (type.startsWith("image/")) {
-    return buildMarkdownImage(name, url, {
+    return buildMarkdownImage(fileName, url, {
       blurhash: extra?.blurhash,
       width: extra?.width,
       height: extra?.height,
@@ -32,7 +30,7 @@ function getFileMarkdown(fileName: string, url: string, mimeType?: string, extra
   } else if (type.startsWith("audio/")) {
     return `<audio src="${url}" controls>` + lineBreak;
   } else {
-    return `[${name}](${url})` + lineBreak;
+    return `[${fileName}](${url})` + lineBreak;
   }
 }
 
@@ -45,10 +43,6 @@ const guessMimeByFileName = (filename: string): string => {
   if (videoExt.includes(ext || "")) return `video/${ext}`;
   if (audioExt.includes(ext || "")) return `audio/${ext}`;
   return "application/octet-stream";
-};
-
-const replaceBrToLineBreak = (text: string): string => {
-  return text.replace(/<br\s*\/?>/gi, "  \n");
 };
 
 export function MarkdownEditor({
@@ -84,12 +78,12 @@ export function MarkdownEditor({
     try {
       for (const file of files) {
         const result = await uploadImageFile(file);
-        const markdown = getFileMarkdown(file.name, result.url, file.type, {
+        const md = getFileMarkdown(file.name, result.url, file.type, {
           blurhash: (result as any).blurhash,
           width: (result as any).width,
           height: (result as any).height,
         });
-        vditorRef.current?.insertValue(markdown);
+        vditorRef.current?.insertValue(md);
       }
     } catch (err) {
       console.error(err);
@@ -143,11 +137,8 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
-          // 启用 HTML 标签渲染（如 <br>），使用 as any 绕过类型缺失
-          preview: {
-            html: true,
-          } as any,
-          input: (rawValue: string) => {   // 显式声明参数类型
+          // input 回调：当内容变化时更新外部状态
+          input: (rawValue: string) => {
             if (isComposingRef.current) return;
             setContent(rawValue);
           },
@@ -161,36 +152,43 @@ export function MarkdownEditor({
               }
             }
 
-            // 绑定粘贴事件处理 <br>
-            const editorEl = container.querySelector(".vditor-ir") as HTMLElement | null;
-            if (editorEl) {
-              const pasteHandler = (e: Event) => {
-                const clipboardEvent = e as ClipboardEvent;
-                const text = clipboardEvent.clipboardData?.getData("text/plain");
-                if (text && /<br\s*\/?>/i.test(text)) {
+            // 获取 IR 编辑器元素，绑定 Enter 键拦截
+            const irElement = container.querySelector(".vditor-ir") as HTMLElement | null;
+            if (irElement) {
+              const handleKeyDown = (e: KeyboardEvent) => {
+                // 仅拦截 Enter，且不在组合输入状态（中文输入法）
+                if (e.key === "Enter" && !isComposingRef.current) {
+                  // 阻止默认行为（防止生成段落）
                   e.preventDefault();
-                  const fixed = replaceBrToLineBreak(text);
-                  vditor.insertValue(fixed);
+                  // 插入真实的 <br> 元素
+                  document.execCommand("insertHTML", false, "<br>");
+                  // 手动触发一次内容更新，确保外部状态同步
+                  if (vditorRef.current) {
+                    const newVal = vditorRef.current.getValue();
+                    setContent(newVal);
+                  }
                 }
               };
-              editorEl.addEventListener("paste", pasteHandler);
+              irElement.addEventListener("keydown", handleKeyDown);
 
+              // 清理函数
+              const prevCleanup = cleanupRef.current;
               cleanupRef.current = () => {
-                editorEl.removeEventListener("paste", pasteHandler);
-                vditor.destroy();
-                vditorRef.current = null;
-                vditorReadyRef.current = false;
+                irElement.removeEventListener("keydown", handleKeyDown);
+                prevCleanup?.();
               };
             }
           },
-        } as any); // 整体 as any 避免其他未声明属性报错
+        } as any);
 
         vditorRef.current = vditor;
 
         // 中文输入法处理
-        const editorEl = container.querySelector(".vditor-ir") as HTMLElement | null;
-        if (editorEl) {
-          const onCompositionStart = () => { isComposingRef.current = true; };
+        const irElement = container.querySelector(".vditor-ir") as HTMLElement | null;
+        if (irElement) {
+          const onCompositionStart = () => {
+            isComposingRef.current = true;
+          };
           const onCompositionEnd = () => {
             isComposingRef.current = false;
             if (vditorRef.current) {
@@ -198,13 +196,16 @@ export function MarkdownEditor({
               setContent(val);
             }
           };
-          editorEl.addEventListener("compositionstart", onCompositionStart);
-          editorEl.addEventListener("compositionend", onCompositionEnd);
+          irElement.addEventListener("compositionstart", onCompositionStart);
+          irElement.addEventListener("compositionend", onCompositionEnd);
 
           const prevCleanup = cleanupRef.current;
           cleanupRef.current = () => {
-            editorEl.removeEventListener("compositionstart", onCompositionStart);
-            editorEl.removeEventListener("compositionend", onCompositionEnd);
+            irElement.removeEventListener("compositionstart", onCompositionStart);
+            irElement.removeEventListener("compositionend", onCompositionEnd);
+            vditor.destroy();
+            vditorRef.current = null;
+            vditorReadyRef.current = false;
             prevCleanup?.();
           };
         }
@@ -220,6 +221,7 @@ export function MarkdownEditor({
     };
   }, []);
 
+  // 外部 content 变化时同步给编辑器（例如加载文章或复原）
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     const vditor = vditorRef.current;
@@ -230,6 +232,7 @@ export function MarkdownEditor({
     }
   }, [content]);
 
+  // 主题切换
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     vditorRef.current?.setTheme(colorMode === "dark" ? "dark" : "classic");
@@ -289,10 +292,8 @@ export function MarkdownEditor({
           className="hidden"
           onChange={(e) => {
             const target = e.target as HTMLInputElement;
-            const files = target.files;
-            if (!files) return;
-            const fileList = Array.from(files) as File[];
-            void handleUploadFiles(fileList);
+            if (!target.files) return;
+            void handleUploadFiles(Array.from(target.files));
           }}
         />
       </div>
