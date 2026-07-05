@@ -727,10 +727,14 @@
     "anonymous": "匿名",
   "confirmClear": "确认清空编辑器内容吗？",
   "upload": {
-    "local": "上传文件",
+    "local": "上传",
     "inputLink": "填入外部文件链接",
     "link": "在线文件",
     "failed": "上传失败"
+"link.emptyUrl": "请输入文件链接地址",
+  "link.emptyName": "请填写文件名称",
+  "link.fileNamePlaceholder": "请输入文件名称（用于展示）",
+  "link.urlPlaceholder": "请输入文件链接",
   },
   "uploading": "上传中"
 }
