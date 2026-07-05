@@ -78,7 +78,6 @@ export function MarkdownEditor({
     }
   };
 
-  // 处理文件上传（本地）
   const handleUploadFiles = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
@@ -101,15 +100,13 @@ export function MarkdownEditor({
     }
   };
 
-  // 本地上传：打开文件选择
   const openLocalUpload = () => {
     fileInputRef.current?.click();
   };
 
-  // 链接上传：通过 URL 和自定义文件名插入
   const openLinkUpload = () => {
     const name = window.prompt(t("upload.link.fileNamePlaceholder"));
-    if (name === null) return; // 用户取消，静默退出
+    if (name === null) return; // 用户取消
     if (!name.trim()) return showAlert(t("upload.link.emptyName"));
 
     const url = window.prompt(t("upload.link.urlPlaceholder"));
@@ -121,7 +118,6 @@ export function MarkdownEditor({
     vditorRef.current?.insertValue(md);
   };
 
-  // 初始化 Vditor
   useLayoutEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
@@ -147,19 +143,14 @@ export function MarkdownEditor({
           counter: { enable: false },
           cache: { enable: false },
           upload: { handler: () => "" },
-
-          // 开启 HTML 渲染，让 <br> 等标签能被即时渲染
-          html: true,
-          render: {
+          // 启用预览 HTML 标签渲染（包括 <br>）
+          preview: {
             html: true,
           },
-
           input: (rawValue) => {
             if (isComposingRef.current) return;
-            // 直接同步内容，不再做全局 <br> 替换以避免光标跳动
             setContent(rawValue);
           },
-
           after: () => {
             vditorReadyRef.current = true;
             if (content && vditor) {
@@ -170,21 +161,20 @@ export function MarkdownEditor({
               }
             }
 
-            // 绑定粘贴事件：处理粘贴内容中的 <br>
-            const editorEl = container.querySelector(".vditor-ir");
+            // 绑定粘贴事件，处理 <br>
+            const editorEl = container.querySelector(".vditor-ir") as HTMLElement | null;
             if (editorEl) {
-              const pasteHandler = (e: ClipboardEvent) => {
-                const text = e.clipboardData?.getData("text/plain");
+              const pasteHandler = (e: Event) => {
+                const clipboardEvent = e as ClipboardEvent;
+                const text = clipboardEvent.clipboardData?.getData("text/plain");
                 if (text && /<br\s*\/?>/i.test(text)) {
                   e.preventDefault();
                   const fixed = replaceBrToLineBreak(text);
                   vditor.insertValue(fixed);
                 }
-                // 否则保持默认粘贴行为
               };
               editorEl.addEventListener("paste", pasteHandler);
 
-              // 记录清理函数
               cleanupRef.current = () => {
                 editorEl.removeEventListener("paste", pasteHandler);
                 vditor.destroy();
@@ -197,8 +187,8 @@ export function MarkdownEditor({
 
         vditorRef.current = vditor;
 
-        // 中文输入法组合文字处理
-        const editorEl = container.querySelector(".vditor-ir");
+        // 中文输入法处理
+        const editorEl = container.querySelector(".vditor-ir") as HTMLElement | null;
         if (editorEl) {
           const onCompositionStart = () => { isComposingRef.current = true; };
           const onCompositionEnd = () => {
@@ -211,7 +201,6 @@ export function MarkdownEditor({
           editorEl.addEventListener("compositionstart", onCompositionStart);
           editorEl.addEventListener("compositionend", onCompositionEnd);
 
-          // 合并清理函数
           const prevCleanup = cleanupRef.current;
           cleanupRef.current = () => {
             editorEl.removeEventListener("compositionstart", onCompositionStart);
@@ -231,7 +220,6 @@ export function MarkdownEditor({
     };
   }, []);
 
-  // 外部传入 content 同步到编辑器
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     const vditor = vditorRef.current;
@@ -242,7 +230,6 @@ export function MarkdownEditor({
     }
   }, [content]);
 
-  // 暗黑/浅色主题切换
   useEffect(() => {
     if (!vditorReadyRef.current) return;
     vditorRef.current?.setTheme(colorMode === "dark" ? "dark" : "classic");
@@ -260,7 +247,6 @@ export function MarkdownEditor({
             <span>复原</span>
           </button>
         )}
-        {/* 拆分为两个独立的上传按钮 */}
         <button
           onClick={openLocalUpload}
           disabled={uploading}
